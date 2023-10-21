@@ -5,30 +5,48 @@ _G = GLOBAL
 
 -- For some reason, `require` didn't import non-local functions?
 -- Whatever, I'll just return a table acting as a namespace then...
-local CountPrefabs = require("counthelpers")
+local CountPrefabs = require("countprefabs")
 
 ---- MOD CONFIGURATIONS --------------------------------------------------------
 
-local defaults = {
-    slash = GetModConfigData("default_slash"),
-    key1 = GetModConfigData("default_key1"),
-    key2 = GetModConfigData("default_key2"),
-    key3 = GetModConfigData("default_key3"),
+-- ? 0-based as global uses mode number 0.
+local default_key = {
+    [0] = GetModConfigData("default_key1"),
+    [1] = GetModConfigData("default_key2"),
+    [2] = GetModConfigData("default_key3"),
 }
 
-local keybinds = {
-    key1 = GetModConfigData("keybind_key1"),
-    key2 = GetModConfigData("keybind_key2"),
-    key3 = GetModConfigData("keybind_key3"),
+local default_slash = GetModConfigData("default_slash")
+
+local keybind_key = {
+    GetModConfigData("keybind_key1"),
+    GetModConfigData("keybind_key2"),
+    GetModConfigData("keybind_key3"),
 }
 
 ---- SLASH COMMAND PROPER ------------------------------------------------------
+
+-- ? 0-based as global uses mode number 0.
+-- Upvalue to avoid constantly constructing this table. It's constant anyway.
+local announce_fns = {
+    -- Global Chat
+    ---@param msg string
+    [0] = function(msg) _G.TheNet:Say(msg) end,
+
+    -- Whisper Chat
+    ---@param msg string
+    [1] = function(msg) _G.TheNet:Say(msg, true) end,
+
+    -- Local Chat
+    ---@param msg string
+    [2] = function(msg) _G.ChatHistory:SendCommandResponse(msg) end,
+}
 
 ---@param mode integer
 ---@param msg string
 local function make_announcement(mode, msg)
     -- `announce_fns` table has index 0 so users can input 0 for global
-    local announcer = CountPrefabs.announce_fns[mode]
+    local announcer = announce_fns[mode]
     if announcer then
         announcer(string.format("%s %s", _G.STRINGS.LMB, msg))
     else
@@ -75,8 +93,8 @@ Modes: 0 for global chat (default), 1 for whisper chat, 2 for local chat.]],
         end
         -- If `mode` is `nil`, we'll use slash cmd's configured default.
         make_announcement(
-            mode or defaults.slash, 
-            CountPrefabs:get_clientcount(prefab)
+            mode or default_slash, 
+            CountPrefabs.get_clientcount(prefab)
         )
     end, 
 }) 
@@ -84,51 +102,48 @@ Modes: 0 for global chat (default), 1 for whisper chat, 2 for local chat.]],
 ---- KEYBIND ACTION SETUP ------------------------------------------------------
 
 local prefix = "MOD_COUNTPREFABS"
-local mod_id = {
-    prefix.."_PRIMARYHOOK",
-    prefix.."_SECONDARYHOOK",
-    prefix.."_TERTIARYHOOK",
+local keybind_id = {
+    prefix.."_KEYBIND1",
+    prefix.."_KEYBIND2",
+    prefix.."_KEYBIND3",
 }
 
--- Creates the prompt to be shown for the action, e.g. `"Local Count"`.
----@param key integer 
----```lua
------ Sample usage:
----get_hint(defaults.key1)
---```
-local function get_hint(key)
-    return CountPrefabs.hint_strings[key]
-end
+-- ? 0-based as global uses mode number 0.
+-- upvalue so we don't constantly construct this table over and over again
+local hint_strings = { 
+    [0] = "Global Count",  
+    [1] = "Whisper Count", 
+    [2] = "Local Count" 
+}
 
 -- All 3 versions of the action have similar implementations, so we can just
--- create them by calling this with the respective key.
----@param mode integer
----```lua
------ Sample usage:
----make_announce_act(defaults.key3)
---```
-local function make_announce_act(mode)
-    return function(act)
+-- create them one by one by passing the numbers 0, 1 and 2.
+---@param index integer Value we'll use to index into `default_key` and `keybind_id`.
+local function make_announce_act(index)
+    -- Action is based on the default configured mode for this keybind.
+    local mode = default_key[index]
+    local function announce_act_fn(act)
         if act and act.doer then
             -- Target is the entity that's the receiver of the action
             local target = act.target
             if target == nil or target.prefab == nil then
                 return
             end
-            make_announcement(
-                mode, 
-                CountPrefabs:get_clientcount(target.prefab)
-            )
+            local message = CountPrefabs.get_clientcount(target.prefab)
+            make_announcement(mode, message)
         end
     end
+    -- Keybind ID is indepdent of configured mode, so need the retain `index`.
+    -- e.g. Keybind #1 uses the ID "MOD_COUNTPREFABS_KEYBIND1" no matter what.
+    return keybind_id[index], hint_strings[mode], announce_act_fn
 end
 
 ---- KEYBIND ACTION PROPER -----------------------------------------------------
 
--- Your primary keybind should only show the word `"Count"`.
-AddAction(mod_id[1], "Count", make_announce_act(defaults.key1))
-AddAction(mod_id[2], get_hint(defaults.key2), make_announce_act(defaults.key2))
-AddAction(mod_id[3], get_hint(defaults.key3), make_announce_act(defaults.key3))
+-- TODO Your primary keybind should only show the word `"Count"`.
+AddAction(make_announce_act(0))
+AddAction(make_announce_act(1))
+AddAction(make_announce_act(2))
 
 -- i just lifted these straight from Environment Pinger's modmain, by sauktux.
 
@@ -136,37 +151,28 @@ local function PlayerActionPickerPostInit(playeractionpicker, player)
     if player ~= _G.ThePlayer then
         return 
     end
-    
+
+    -- Directly overriding `DoGetMouseActions` but hook to retain original behavior
     local old_DoGetMouseActions = playeractionpicker.DoGetMouseActions
     playeractionpicker.DoGetMouseActions = function(self, position, target)
+        -- Our new action comes after the original function is run normally
         local lmb, rmb = old_DoGetMouseActions(self, position, target)
-        if _G.TheInput:IsKeyDown(keybinds.key1) then
+        if _G.TheInput:IsKeyDown(keybind_key[1]) then
             local entity_target = _G.TheInput:GetWorldEntityUnderMouse()
             local hud_entity = _G.TheInput:GetHUDEntityUnderMouse()
-           
+
+            -- Don't count hud entities, or when user is pressing the correct 
+            -- keybinds but there's no entity *to* count
             if hud_entity or not entity_target then
                return lmb, rmb
             end
-           
-            lmb = _G.BufferedAction(
-                player, 
-                entity_target, 
-                _G.ACTIONS[mod_id[1]]
-            )
 
-            if _G.TheInput:IsKeyDown(keybinds.key2) then
-                lmb = _G.BufferedAction(
-                    player, 
-                    entity_target, 
-                    _G.ACTIONS[mod_id[2]]
-                )
-
-                if _G.TheInput:IsKeyDown(keybinds.key3) then
-                    lmb = _G.BufferedAction(
-                        player, 
-                        entity_target, 
-                        _G.ACTIONS[mod_id[3]]
-                    )
+            -- This is ugly as hell but it works...
+            lmb = _G.BufferedAction(player, entity_target, _G.ACTIONS[keybind_id[1]])
+            if _G.TheInput:IsKeyDown(keybind_key[2]) then
+                lmb = _G.BufferedAction(player, entity_target, _G.ACTIONS[keybind_id[2]])
+                if _G.TheInput:IsKeyDown(keybind_key[3]) then
+                    lmb = _G.BufferedAction(player, entity_target, _G.ACTIONS[keybind_id[3]])
                 end
             end
         end

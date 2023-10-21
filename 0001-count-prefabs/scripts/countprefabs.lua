@@ -47,24 +47,22 @@ function CountPrefabs.is_countable(what, prefab)
 end
 
 -- Just functioning this out because goodness this check is verbose.
--- If no `replica.stackable` field exists, assume "stacksize" = 1.
+-- If no `replica.stackable` field exists, assume a stack is 1.
 function CountPrefabs.get_stacksize(whom)
     return whom.replica.stackable and whom.replica.stackable:StackSize() or 1
 end
 
 -- Actually creates the prefab count of the prefab in your loaded area.
--- Need to pass `self` so we have immediate access to member methods.
-function CountPrefabs:make_tally(prefab)
+---@param prefab string
+---@param entities table
+function CountPrefabs.get_counts(prefab, entities)
     local total = 0
     local stacks = 0
-    local x, y, z = _G.ThePlayer.Transform:GetWorldPosition()
-    -- Radius 80 is approximately how long your loaded range is.
-    local loaded_entities = _G.TheSim:FindEntities(x, y, z, 80)
 
-    for _, entity in pairs(loaded_entities) do
+    for _, entity in pairs(entities) do
         -- if it's in a container/being held, we'll ignore it
-        if self.is_countable(entity, prefab) then
-            total  = total + self.get_stacksize(entity)
+        if CountPrefabs.is_countable(entity, prefab) then
+            total  = total + CountPrefabs.get_stacksize(entity)
             stacks = stacks + 1 
         end
     end
@@ -72,17 +70,18 @@ function CountPrefabs:make_tally(prefab)
     return total, stacks
 end
 
----- MODENV COUNT FUNCTIONS ----------------------------------------------------
+---- COUNT PREFABS PROPER ------------------------------------------------------
 
--- Pass `self` via colon notation so we have immediate access to member methods.
+-- Generic count function to allow us to work with either client or server.
 ---@param prefab string
-function CountPrefabs:get_clientcount(prefab)
-    local world = self.get_shard()
-    local total, stacks = self:make_tally(prefab)
-    local basic = "%s - There are %s here."
+---@param entities table
+function CountPrefabs.make_tally(prefab, entities)
+    local world = CountPrefabs.get_shard()
+    local total, stacks = CountPrefabs.get_counts(prefab, entities)
+    local basic = "%s: There are %s here."
 
     -- Reformat to display name then prefab, e.g. `"Beefalo ('beefalo')"`
-    prefab = string.format("%s ('%s')", self.get_displayname(prefab), prefab)
+    prefab = string.format("%s ('%s')", CountPrefabs.get_displayname(prefab), prefab)
 
     if total == 0 then
         -- Grammar for none found.
@@ -100,26 +99,22 @@ function CountPrefabs:get_clientcount(prefab)
     return basic:format(world, prefab)
 end
 
--- Upvalue to avoid constantly constructing this table. It's constant anyway.
-CountPrefabs.announce_fns = {
-    -- Global Chat
-    ---@param msg string
-    [0] = function(msg) _G.TheNet:Say(msg) end,
+---@param prefab string
+function CountPrefabs.get_servercount(prefab)
+    -- Need a local var so we can toss away the numbers returned from `gsub`.
+    local s = CountPrefabs.make_tally(prefab, _G.Ents):gsub("here", "in the shard")
+    return s
+end
 
-    -- Whisper Chat
-    ---@param msg string
-    [1] = function(msg) _G.TheNet:Say(msg, true) end,
+---@param prefab string
+function CountPrefabs.get_clientcount(prefab)
+    -- coords are ever-changing, so we need to constantly retrieve its values.
+    local x, y, z = _G.ThePlayer.Transform:GetWorldPosition()
 
-    -- Local Chat
-    ---@param msg string
-    [2] = function(msg) _G.ChatHistory:SendCommandResponse(msg) end,
-}
+    -- Radius 80 is approximately how long your loaded range is.
+    local ents = _G.TheSim:FindEntities(x, y, z, 80)
 
--- upvalue so we don't constantly construct this table over and over again
-CountPrefabs.hint_strings = { 
-    [0] = "Global Count",  
-    [1] = "Whisper Count", 
-    [2] = "Local Count" 
-}
+    return CountPrefabs.make_tally(prefab, ents)
+end
 
 return CountPrefabs

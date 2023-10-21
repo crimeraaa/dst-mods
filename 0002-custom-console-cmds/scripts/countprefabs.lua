@@ -1,0 +1,1 @@
+C:/Users/crimeraaa/repos/dst/mods/0001-count-prefabs/scripts/countprefabs.lua
