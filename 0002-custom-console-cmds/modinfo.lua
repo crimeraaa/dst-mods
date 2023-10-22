@@ -28,8 +28,8 @@ dont_starve_compatible = false
 
 client_only_mod = false
 -- TODO Figure out if `server_only` or `all_clients_require`...
-server_only_mod = true
-all_clients_require_mod = false
+server_only_mod = false
+all_clients_require_mod = true
 
 -- TODO Comment out when these are needed.
 -- ---- HELPER FUNCTIONS ----------------------------------------------------------

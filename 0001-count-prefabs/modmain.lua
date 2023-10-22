@@ -102,6 +102,8 @@ Modes: 0 for global chat (default), 1 for whisper chat, 2 for local chat.]],
 ---- KEYBIND ACTION SETUP ------------------------------------------------------
 
 local prefix = "MOD_COUNTPREFABS"
+
+-- 1-based as Lua normally is, because "key0" doesn't seem right to me.
 local keybind_id = {
     prefix.."_KEYBIND1",
     prefix.."_KEYBIND2",
@@ -118,7 +120,8 @@ local hint_strings = {
 
 -- All 3 versions of the action have similar implementations, so we can just
 -- create them one by one by passing the numbers 0, 1 and 2.
----@param index integer Value we'll use to index into `default_key` and `keybind_id`.
+-- This returns the prompt string and the actual action function.
+---@param index integer Value we'll use to index into `default_key`.
 local function make_announce_act(index)
     -- Action is based on the default configured mode for this keybind.
     local mode = default_key[index]
@@ -133,17 +136,15 @@ local function make_announce_act(index)
             make_announcement(mode, message)
         end
     end
-    -- Keybind ID is indepdent of configured mode, so need the retain `index`.
-    -- e.g. Keybind #1 uses the ID "MOD_COUNTPREFABS_KEYBIND1" no matter what.
-    return keybind_id[index], hint_strings[mode], announce_act_fn
+    return hint_strings[mode], announce_act_fn
 end
 
 ---- KEYBIND ACTION PROPER -----------------------------------------------------
 
 -- TODO Your primary keybind should only show the word `"Count"`.
-AddAction(make_announce_act(0))
-AddAction(make_announce_act(1))
-AddAction(make_announce_act(2))
+AddAction(keybind_id[1], make_announce_act(0))
+AddAction(keybind_id[2], make_announce_act(1))
+AddAction(keybind_id[3], make_announce_act(2))
 
 -- i just lifted these straight from Environment Pinger's modmain, by sauktux.
 

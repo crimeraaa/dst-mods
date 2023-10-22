@@ -4,17 +4,17 @@ local CountPrefabs = {}
 
 -- TODO Find a way to dump all tags `TheWorld` so we can just index into those.
 function CountPrefabs.get_shard()
-    local shard = "THIS SHARD"
     if _G.TheWorld:HasTag("forest") then 
-        shard = "SURFACE"
+        return "SURFACE"
     elseif _G.TheWorld:HasTag("cave") then 
-        shard = "CAVES" 
+        return "CAVES" 
     elseif _G.TheWorld:HasTag("island") then 
-        shard = "SHIPWRECKED" 
+        return "SHIPWRECKED" 
     elseif _G.TheWorld:HasTag("volcano") then 
-        shard = "VOLCANO" 
+        return "VOLCANO" 
     end
-    return shard
+    -- Default in case none of the above were matched
+    return "THIS SHARD"
 end
 
 -- Instances can have different display names from their prefab's display name. 
@@ -78,7 +78,7 @@ end
 function CountPrefabs.make_tally(prefab, entities)
     local world = CountPrefabs.get_shard()
     local total, stacks = CountPrefabs.get_counts(prefab, entities)
-    local basic = "%s: There are %s here."
+    local basic = "%s: There are %s."
 
     -- Reformat to display name then prefab, e.g. `"Beefalo ('beefalo')"`
     prefab = string.format("%s ('%s')", CountPrefabs.get_displayname(prefab), prefab)
@@ -101,9 +101,7 @@ end
 
 ---@param prefab string
 function CountPrefabs.get_servercount(prefab)
-    -- Need a local var so we can toss away the numbers returned from `gsub`.
-    local s = CountPrefabs.make_tally(prefab, _G.Ents):gsub("here", "in the shard")
-    return s
+    return CountPrefabs.make_tally(prefab, _G.Ents)
 end
 
 ---@param prefab string
