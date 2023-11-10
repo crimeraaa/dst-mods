@@ -9,15 +9,19 @@ local CountPrefabs = require("countprefabs")
 
 ---- MOD CONFIGURATIONS --------------------------------------------------------
 
--- ? 0-based as global uses mode number 0.
+-- ? 0-based as the option for global chat uses mode number 0.
+---@type integer[]
 local default_key = {
+    ---@type integer
     [0] = GetModConfigData("default_key1"),
     [1] = GetModConfigData("default_key2"),
     [2] = GetModConfigData("default_key3"),
 }
 
+---@type integer
 local default_slash = GetModConfigData("default_slash")
 
+---@type integer[]
 local keybind_key = {
     GetModConfigData("keybind_key1"),
     GetModConfigData("keybind_key2"),
@@ -26,35 +30,64 @@ local keybind_key = {
 
 ---- SLASH COMMAND PROPER ------------------------------------------------------
 
--- ? 0-based as global uses mode number 0.
+-- ? 0-based as global chat uses mode number 0.
 -- Upvalue to avoid constantly constructing this table. It's constant anyway.
 local announce_fns = {
     -- Global Chat
-    ---@param msg string
     [0] = function(msg) _G.TheNet:Say(msg) end,
 
     -- Whisper Chat
-    ---@param msg string
     [1] = function(msg) _G.TheNet:Say(msg, true) end,
 
     -- Local Chat
-    ---@param msg string
     [2] = function(msg) _G.ChatHistory:SendCommandResponse(msg) end,
 }
 
+-- All validation checks should have been run beforehand.
 ---@param mode integer
 ---@param msg string
 local function make_announcement(mode, msg)
     -- `announce_fns` table has index 0 so users can input 0 for global
     local announcer = announce_fns[mode]
-    if announcer then
-        announcer(string.format("%s %s", _G.STRINGS.LMB, msg))
-    else
-        -- Invalid mode, warn user instead
-        _G.ChatHistory:SendCommandResponse(
-            string.format("Invalid mode '%i'; see /help count.", mode)
-        )
+    announcer(string.format("%s %s", _G.STRINGS.LMB, msg))
+end
+
+-- Pass in `params.mode`.
+---@param mode string
+local function validate_mode(mode)
+    -- Got an argument for `params.mode`, so validate it first.
+    if mode ~= nil then
+        -- Params are always strings. Note that `tonumber` isn't part of mod env.
+        local converted = _G.tonumber(mode)
+        -- Wasn't a number or a valid announcement mode.
+        if converted == nil or announce_fns[converted] == nil then
+            _G.ChatHistory:SendCommandResponse(
+                string.format("Invalid mode '%s'; see /help count.", mode)
+            )
+            return nil
+        end
+        return converted
     end
+    -- Got no argument, so fall back to the mod configuration for slash command.
+    return default_slash
+end
+
+-- Pass in `params.prefab`. 
+-- Converts `param` to lowercase + checks if exists in the `_G.Prefabs` table.
+local function validate_prefab(prefab)
+    -- Convert to lowercase as all DST prefabs are lowercase.
+    prefab = string.lower(prefab)
+
+    -- `_G.Prefabs` table contains all currently existing prefabs. 
+    -- ? It may include modded prefabs too!
+    if _G.Prefabs[prefab] == nil then
+        _G.ChatHistory:SendCommandResponse(
+            string.format("Invalid prefab '%s'!", prefab)
+        ) 
+        return nil
+    end
+    -- Prefab exists so we're good to go!
+    return prefab
 end
 
 AddUserCommand("count", {
@@ -71,31 +104,29 @@ Modes: 0 for global chat (default), 1 for whisper chat, 2 for local chat.]],
     paramsoptional = {false, true}, 
     vote = false, 
     localfn = function(params, caller) 
-        -- I'm unsure how this can happen, but this is a holdover from the
-        -- original modmain Crestwave wrote out for me long long ago.
+        -- Can run slash commands in various situations so avoid these ones
         if caller == nil or caller.HUD == nil then 
-            return 
+            return
         end 
 
-        -- Params are strings by default, so convert them.
-        -- Note that `tonumber` isn't part of DST's mod env, need `_G`.
-        local mode = _G.tonumber(params.mode)
+        -- DST prefab strings are always lowercase.
+        local prefab = validate_prefab(params.prefab)
+        local mode = validate_mode(params.mode)
 
-        -- Correct string case here in case user didn't use all lowercase.
-        local prefab = string.lower(params.prefab)
-
-        --warn the user for clarity!
-        if _G.Prefabs[prefab] == nil then
-            _G.ChatHistory:SendCommandResponse(
-                string.format("Invalid prefab '%s'!", prefab)
-            ) 
+        -- If both validation functions returned nil, something went wrong.
+        -- They already send error messages so we don't need to do anything.
+        if prefab == nil and mode == nil then
             return
         end
-        -- If `mode` is `nil`, we'll use slash cmd's configured default.
-        make_announcement(
-            mode or default_slash, 
-            CountPrefabs.get_clientcount(prefab)
-        )
+
+        -- coords are ever-changing, so we need to constantly retrieve its values.
+        local x, y, z = _G.ThePlayer.Transform:GetWorldPosition()
+
+        -- Radius 80 is approximately how long your loaded range is.
+        local ents = _G.TheSim:FindEntities(x, y, z, 80)
+
+        local tally = CountPrefabs:make_tally(prefab, ents)
+        make_announcement(mode, tally)
     end, 
 }) 
 
@@ -132,8 +163,10 @@ local function make_announce_act(index)
             if target == nil or target.prefab == nil then
                 return
             end
-            local message = CountPrefabs.get_clientcount(target.prefab)
-            make_announcement(mode, message)
+            local x, y, z = act.Transform:GetWorldPosition()
+            local ents = _G.TheSim:FindEntities(x, y, z, 80)
+            local tally = CountPrefabs:make_tally(target.prefab, ents, false)
+            make_announcement(mode, tally)
         end
     end
     return hint_strings[mode], announce_act_fn
