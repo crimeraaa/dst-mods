@@ -1,41 +1,6 @@
----- COUNT PREFABS HELPER FUNCTIONS --------------------------------------------
+---@diagnostic disable: duplicate-set-field
+CountPrefabs = {}
 
-local CountPrefabs = {}
-
--- TODO Find a way to dump all tags `TheWorld` so we can just index into those.
-function CountPrefabs:get_shard()
-    if _G.TheWorld:HasTag("forest") then 
-        return "SURFACE"
-    elseif _G.TheWorld:HasTag("cave") then 
-        return "CAVES" 
-    elseif _G.TheWorld:HasTag("island") then 
-        return "SHIPWRECKED" 
-    elseif _G.TheWorld:HasTag("volcano") then 
-        return "VOLCANO" 
-    end
-    -- Default in case none of the above were matched
-    return "THIS SHARD"
-end
-
--- Instances can have different display names from their prefab's display name. 
--- e.g. bonded Beefalo, players, pigmen, merms, etc.
--- This gets the generic prefab display name.
----@param prefab string
-function CountPrefabs:get_displayname(prefab) 
-    -- I'm assuming that the valid prefab check was already run beforehand
-    -- Need upper because all the keys in `STRINGS.NAMES` are uppercase.
-    local display = _G.STRINGS.NAMES[string.upper(prefab)]
-    -- Some valid prefabs don't have display names
-    if not display then 
-        _G.ChatHistory:SendCommandResponse(
-            string.format("Prefab '%s' has no Display Name!", prefab)
-        )
-    end
-    -- If no display name (i.e. it's `nil`), we'll just use `"Missing Name"`.
-    return display or "Missing Name"
-end
-
--- This check is so verbose, so I'd rather function it out.
 -- Checks if `what` is indeed an instance of `prefab` and that it's not
 -- currently being held by someone or in a container.
 function CountPrefabs:is_countable(what, prefab)
@@ -44,13 +9,12 @@ function CountPrefabs:is_countable(what, prefab)
     )
 end
 
--- Just functioning this out because goodness this check is verbose.
 -- If no `replica.stackable` field exists, assume a stack is 1.
 function CountPrefabs:get_stacksize(whom)
     return whom.replica.stackable and whom.replica.stackable:StackSize() or 1
 end
 
--- Actually creates the prefab count of the prefab in your loaded area.
+-- Actually creates the prefab count of the prefab in the loaded area.
 ---@param prefab string
 ---@param entities table
 ---@param remove boolean
@@ -70,37 +34,40 @@ function CountPrefabs:get_counts(prefab, entities, remove)
     return total, stacks
 end
 
----- COUNT PREFABS PROPER ------------------------------------------------------
+----------------------------- COUNT PREFABS PROPER -----------------------------
 
 -- Generic count function to allow us to work with either client or server.
 ---@param prefab string
 ---@param entities table
 ---@param remove? boolean Pass `true` to also remove all instances of this prefab.
 function CountPrefabs:make_tally(prefab, entities, remove)
-    local world = self:get_shard()
+    local world = CustomCmd:get_shard()
     local total, stacks = self:get_counts(prefab, entities, remove or false)
     local basic = "%s: There are %s."
 
     -- Reformat to display name then prefab, e.g. `"Beefalo ('beefalo')"`
-    prefab = string.format("%s ('%s')", self:get_displayname(prefab), prefab)
+    prefab = string.format("%s ('%s')", CustomCmd:get_displayname(prefab), prefab)
 
     -- Adjust our message's grammar so it looks right.
     if total == 0 then
-        -- Grammar for none found.
+        -- Grammar for none found.get_display
         basic = basic:gsub("are", "is no")
     elseif total == 1 then
         -- Grammar for singular found.
         basic = basic:gsub("are", "is a")
     elseif total == stacks then
-        -- Entity is probably unstackable but there's multiple of it.
+        -- Entity is probably unstackable but there's multiple of it,
+        -- or entity is stackable but we only found stacks of 1.
         prefab = string.format("%d %s", total, prefab)
     else
-        -- There's multiple of this entity and has different stacks.
+        -- There's multiple of this entity and it has different stacks.
         prefab = string.format("%d %s, in %d stacks", total, prefab, stacks)
     end
 
-    if total > 1 and remove == true then
-        basic = basic:gsub("There are", "Removed")
+    -- Replace "There is " and "There are " with "Removed " (whitespace included)
+    -- Use non-greedy algorithm so we don't match the entire string.
+    if remove == true and total >= 1 then
+        basic = basic:gsub("There %w-%s", "Removed ")
     end
 
     return basic:format(world, prefab)

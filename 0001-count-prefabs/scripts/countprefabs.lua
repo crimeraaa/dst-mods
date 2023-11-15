@@ -27,9 +27,10 @@ function CountPrefabs:get_displayname(prefab)
     local display = _G.STRINGS.NAMES[string.upper(prefab)]
     -- Some valid prefabs don't have display names
     if not display then 
-        _G.ChatHistory:SendCommandResponse(
-            string.format("Prefab '%s' has no Display Name!", prefab)
-        )
+        local warning = string.format("Prefab '%s' has no Display Name!", prefab)
+        _G.ChatHistory:SendCommandResponse(warning)
+        -- dedicated servers can't use `SendCommandResponse`, so do this instead
+        print(warning)
     end
     -- If no display name (i.e. it's `nil`), we'll just use `"Missing Name"`.
     return display or "Missing Name"
@@ -70,7 +71,7 @@ function CountPrefabs:get_counts(prefab, entities, remove)
     return total, stacks
 end
 
----- COUNT PREFABS PROPER ------------------------------------------------------
+----------------------------- COUNT PREFABS PROPER -----------------------------
 
 -- Generic count function to allow us to work with either client or server.
 ---@param prefab string
@@ -92,18 +93,29 @@ function CountPrefabs:make_tally(prefab, entities, remove)
         -- Grammar for singular found.
         basic = basic:gsub("are", "is a")
     elseif total == stacks then
-        -- Entity is probably unstackable but there's multiple of it.
+        -- Entity is probably unstackable but there's multiple of it,
+        -- or entity is stackable but we only found stacks of 1.
         prefab = string.format("%d %s", total, prefab)
     else
         -- There's multiple of this entity and has different stacks.
         prefab = string.format("%d %s, in %d stacks", total, prefab, stacks)
     end
 
-    if total > 1 and remove == true then
-        basic = basic:gsub("There are", "Removed")
+    -- Replace "There is " and "There are " with "Removed " (whitespace included)
+    -- Use non-greedy algorithm so we don't match the entire string.
+    if remove == true and total >= 1 then
+        basic = basic:gsub("There %w-%s", "Removed ")
     end
 
     return basic:format(world, prefab)
+end
+
+-- I do this a lot so I've functioned it out. Gets entities loaded by `ThePlayer`
+-- within 80 radius units, which is about how far our loading range goes.
+function CountPrefabs:get_client_ents()
+    -- Player's coordinates are ever-changing, so need to determine them here
+    local x, y, z = _G.ThePlayer.Transform:GetWorldPosition()
+    return _G.TheSim:FindEntities(x, y, z, 80)
 end
 
 return CountPrefabs

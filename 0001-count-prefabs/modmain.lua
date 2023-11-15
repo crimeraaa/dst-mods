@@ -5,7 +5,7 @@ _G = GLOBAL
 
 -- For some reason, `require` didn't import non-local functions?
 -- Whatever, I'll just return a table acting as a namespace then...
-local CountPrefabs = require("countprefabs")
+CountPrefabs = require("countprefabs")
 
 ---- MOD CONFIGURATIONS --------------------------------------------------------
 
@@ -81,9 +81,9 @@ local function validate_prefab(prefab)
     -- `_G.Prefabs` table contains all currently existing prefabs. 
     -- ? It may include modded prefabs too!
     if _G.Prefabs[prefab] == nil then
-        _G.ChatHistory:SendCommandResponse(
-            string.format("Invalid prefab '%s'!", prefab)
-        ) 
+        local warning = string.format("Invalid prefab '%s'!", prefab)
+        _G.ChatHistory:SendCommandResponse(warning)
+        print(warning)
         return nil
     end
     -- Prefab exists so we're good to go!
@@ -119,13 +119,10 @@ Modes: 0 for global chat (default), 1 for whisper chat, 2 for local chat.]],
             return
         end
 
-        -- coords are ever-changing, so we need to constantly retrieve its values.
-        local x, y, z = _G.ThePlayer.Transform:GetWorldPosition()
-
-        -- Radius 80 is approximately how long your loaded range is.
-        local ents = _G.TheSim:FindEntities(x, y, z, 80)
-
-        local tally = CountPrefabs:make_tally(prefab, ents)
+        local tally = CountPrefabs:make_tally(
+            prefab, 
+            CountPrefabs:get_client_ents()
+        )
         make_announcement(mode, tally)
     end, 
 }) 
@@ -142,6 +139,7 @@ local keybind_id = {
 }
 
 -- ? 0-based as global uses mode number 0.
+--
 -- upvalue so we don't constantly construct this table over and over again
 local hint_strings = { 
     [0] = "Global Count",  
@@ -163,32 +161,33 @@ local function make_announce_act(index)
             if target == nil or target.prefab == nil then
                 return
             end
-            local x, y, z = act.Transform:GetWorldPosition()
-            local ents = _G.TheSim:FindEntities(x, y, z, 80)
-            local tally = CountPrefabs:make_tally(target.prefab, ents, false)
+            local tally = CountPrefabs:make_tally(
+                target.prefab, 
+                CountPrefabs:get_client_ents(), 
+                false
+            )
             make_announcement(mode, tally)
         end
     end
     return hint_strings[mode], announce_act_fn
 end
 
----- KEYBIND ACTION PROPER -----------------------------------------------------
+---------------------------- KEYBIND ACTION PROPER -----------------------------
 
--- TODO Your primary keybind should only show the word `"Count"`.
 AddAction(keybind_id[1], make_announce_act(0))
 AddAction(keybind_id[2], make_announce_act(1))
 AddAction(keybind_id[3], make_announce_act(2))
 
 -- i just lifted these straight from Environment Pinger's modmain, by sauktux.
 
-local function PlayerActionPickerPostInit(playeractionpicker, player)
+AddComponentPostInit("playeractionpicker", function(self, player)
     if player ~= _G.ThePlayer then
         return 
     end
 
     -- Directly overriding `DoGetMouseActions` but hook to retain original behavior
-    local old_DoGetMouseActions = playeractionpicker.DoGetMouseActions
-    playeractionpicker.DoGetMouseActions = function(self, position, target)
+    local old_DoGetMouseActions = self.DoGetMouseActions
+    function self:DoGetMouseActions(position, target)
         -- Our new action comes after the original function is run normally
         local lmb, rmb = old_DoGetMouseActions(self, position, target)
         if _G.TheInput:IsKeyDown(keybind_key[1]) then
@@ -212,20 +211,20 @@ local function PlayerActionPickerPostInit(playeractionpicker, player)
         end
         return lmb, rmb
     end
-end
+end)
 
 -- state variable that's constantly toggled by `OnLeftClick` below
 local cooldown = false 
 
-local function PlayerControllerPostInit(playercontroller, player)
+AddComponentPostInit("playercontroller", function(self, player)
     -- Might try to init other players even if we're clientsided
     if player ~= _G.ThePlayer then
         return
     end
 
     -- We're directly overriding `OnLeftClick` so we'll do some hooking
-    local old_OnLeftClick = playercontroller.OnLeftClick
-    playercontroller.OnLeftClick = function(self, down, ...)
+    local old_OnLeftClick = self.OnLeftClick
+    function self:OnLeftClick(down, ...)
         local lmb = self:GetLeftMouseAction()
         if down and lmb and lmb.action.id and string.match(lmb.action.id, prefix) then
             if not cooldown then
@@ -233,6 +232,7 @@ local function PlayerControllerPostInit(playercontroller, player)
                     cooldown = false 
                 end)
                 lmb.action.fn(lmb)
+                return
             end
             -- if attempting to count while on cooldown, just do nothing
             return
@@ -240,7 +240,4 @@ local function PlayerControllerPostInit(playercontroller, player)
         -- if none of the above, do the original leftclick
         old_OnLeftClick(self, down, ...) 
     end
-end
-
-AddComponentPostInit("playeractionpicker", PlayerActionPickerPostInit)
-AddComponentPostInit("playercontroller", PlayerControllerPostInit)
+end)
