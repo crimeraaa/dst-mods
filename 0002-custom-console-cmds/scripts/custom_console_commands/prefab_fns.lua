@@ -6,9 +6,9 @@
 ---@param prefabs string[]
 ---@param remove boolean
 local function prefabs_helper(prefabs, remove) 
+    -- Record invalid inputs in order so user knows what went wrong
     ---@type string[]
     local invalid_inputs = {}
-
     for _, prefab in ipairs(prefabs) do
         -- DST's prefab strings are always lowercase.
         -- If you input a non-string for some reason, that's handled too.
@@ -21,7 +21,6 @@ local function prefabs_helper(prefabs, remove)
             _G.TheNet:Announce(CountPrefabs:make_tally(prefab, _G.Ents, remove))
         end
     end
-
     -- Only print out error messages if we have at least 1 invalid input
     if #invalid_inputs > 0 then
         print("The following inputs were invalid:")
@@ -43,7 +42,7 @@ local function make_prefabsfn(fn_name, remove)
     ---@param ... string
     return function(prefab, ...)
         if prefab == nil or type(prefab) ~= "string" then
-            CustomCmd:print_usage(UsageStrings[fn_name])
+            Helper:print_usage(UsageStrings[fn_name])
             return
         end
         prefabs_helper({prefab, ...}, remove)

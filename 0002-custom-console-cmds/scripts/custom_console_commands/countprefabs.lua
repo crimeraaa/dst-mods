@@ -41,12 +41,12 @@ end
 ---@param entities table
 ---@param remove? boolean Pass `true` to also remove all instances of this prefab.
 function CountPrefabs:make_tally(prefab, entities, remove)
-    local world = CustomCmd:get_shard()
+    local world = Helper:get_shard()
     local total, stacks = self:get_counts(prefab, entities, remove or false)
     local basic = "%s: There are %s."
 
     -- Reformat to display name then prefab, e.g. `"Beefalo ('beefalo')"`
-    prefab = string.format("%s ('%s')", CustomCmd:get_displayname(prefab), prefab)
+    prefab = string.format("%s ('%s')", Helper:get_displayname(prefab), prefab)
 
     -- Adjust our message's grammar so it looks right.
     if total == 0 then

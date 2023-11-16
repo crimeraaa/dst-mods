@@ -5,10 +5,14 @@
 ---@field params string
 ---@field retval string
 
+-- Hardcoded strings which are (usually) displayed when you invoke the commands
+-- without any arguments. 
+-- 
+-- They're meant to teach you about the basics of the command.
+-- Also to help you know about any quirks to take note of.
 UsageStrings = {}
 
 UsageStrings.c_countall = {
-    -- To be supplied by the call to `make_prefabsfn`
     syntax = "c_countall(<prefab>, [...])",
     params = [[
     <prefab>: 
@@ -49,12 +53,10 @@ UsageStrings.c_giveto = {
         Lowercase string of the prefab name to give, e.g. "log".
     [count]:
         How many of this prefab to give. Defaults to 1 if nil.
-        If specified, must be 1 or greater.
-    ]],
+        If specified, must be 1 or greater.]],
     sample = [[
     c_giveto(1, "log")
-    c_giveto(3, "meat", 20)
-    ]],
+    c_giveto(3, "meat", 20)]],
 }
 
 UsageStrings.c_giveall = {
@@ -64,12 +66,10 @@ UsageStrings.c_giveall = {
         Lowercase string of the prefab name to give, e.g. "log".
     [count]:
         How many of this prefab to give. Defaults to 1 if nil.
-        If specified, must be 1 or greater.
-    ]],
+        If specified, must be 1 or greater.]],
     sample = [[
     c_giveall("log")
-    c_giveall("meat", 20)
-    ]],
+    c_giveall("meat", 20)]],
 }
 
 UsageStrings.c_spawnbeef = {
