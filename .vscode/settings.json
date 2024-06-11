@@ -1,0 +1,12 @@
+{
+    "Lua.diagnostics.disable": [
+        "lowercase-global",
+        "trailing-space",
+        "need-check-nil",
+        "trailing-space",
+        "undefined-field"
+    ],
+    "Lua.workspace.library": [
+        "C:\\Users\\crimeraaa\\repos\\dst",
+    ]
+}

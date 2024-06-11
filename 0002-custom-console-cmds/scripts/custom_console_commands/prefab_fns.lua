@@ -18,7 +18,7 @@ local function prefabs_helper(prefabs, remove)
         if _G.Prefabs[prefab] == nil then
             table.insert(invalid_inputs, string.format("'%s'", prefab))
         else
-            _G.TheNet:Announce(CountPrefabs:make_tally(prefab, _G.Ents, remove))
+            _G.TheNet:Announce(CountPrefabs.make_tally(prefab, _G.Ents, remove))
         end
     end
     -- Only print out error messages if we have at least 1 invalid input
@@ -42,7 +42,7 @@ local function make_prefabsfn(fn_name, remove)
     ---@param ... string
     return function(prefab, ...)
         if prefab == nil or type(prefab) ~= "string" then
-            Helper:print_usage(UsageStrings[fn_name])
+            Helper.print_usage(UsageStrings[fn_name])
             return
         end
         prefabs_helper({prefab, ...}, remove)
