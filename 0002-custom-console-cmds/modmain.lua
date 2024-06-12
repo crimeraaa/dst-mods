@@ -1,23 +1,146 @@
--- These are declared as globals within the mod environment, so they should
--- be accessible from within any of this mod's scripts.
+---@class Map<K, V>: {[K]: V}
+---@class Dictionary<T>: {[string]: T}
+
+---@class ParamInfo
+---@field type string
+---@field desc string
+---@field sample? string[]
+---@field optional? boolean
+---@field default? string|number|boolean
+---@field isvararg? boolean
+
+---@class DocString
+---@field sample  string[] A series of format strings showing sample usages.
+---@field params  string[] A series of keys into `Params`.
+---@field retval? ParamInfo
 
 _G = GLOBAL
 _G.CustomCmd = {} -- expose to global env as mod env is sandboxed
 
 CustomCmd = _G.CustomCmd
-CustomCmd.Docs  = require("custom_console_commands/docs")
 CustomCmd.Util  = require("custom_console_commands/util")
 CustomCmd.Check = require("custom_console_commands/check")
 CustomCmd.Count = require("custom_console_commands/count")
 
-CustomCmd.count_all = CustomCmd.Count.make_fn("count_all", false)
-CustomCmd.remove_all = CustomCmd.Count.make_fn("remove_all", true)
+---@type Dictionary<ParamInfo>
+local Params = {
+    command = {
+        type = "string|function",
+        desc = "A key into CustomCmd, sample string usage, or a function thereof.",
+        sample = {"\"give_to\"", "\"CustomCmd.count_all\"", "CustomCmd.get_tags"},
+        optional = true,
+        default = "calling CustomCmd.list()",
+    },
+    inst = {
+        type = "table",
+        desc = "An entity instance.",
+        sample = {"ThePlayer", "c_findnext(\"beefalo\")", "c_spawn(\"pigman\")"},
+    },
+    item_count = {
+        type = "integer",
+        desc = "How many of the given prefab to give. Must be 1 or greater.",
+        optional = true,
+        default = 1,
+    },
+    player_number = {
+        type = "integer",
+        desc = "Index into the AllPlayers table to retrieve a player entity.",
+    },
+    prefab = {
+        type = "string",
+        desc = "Prefab name in Lua code.",
+        sample = {"\"log\"", "\"pigman\"", "\"meat\""},
+    },
+    ["prefabs..."] = {
+        type = "string",
+        desc = "0 or more other prefabs.",
+        optional = true,
+        isvararg = true,
+    },
+    saddle = {
+        type = "string",
+        desc = "A saddle prefab name. You can omit the \"saddle_\" part.",
+        sample = {"\"saddle_basic\"", "\"saddle_race\"", "\"saddle_war\"",
+            "\"basic\"", "\"race\"", "\"war\""},
+        optional = true,
+        default = "\"saddle_race\"",
+    },
+    tag = {
+        type = "string",
+        desc = "An entity tag.",
+        sample = {"\"beefalo\"", "\"merm\"", "\"player\""},
+    },
+    ["tags..."] = {
+        type = "string",
+        desc = "0 or more other tags.",
+        optional = true,
+        isvararg = true,
+    },
+    tendency = {
+        type = "string",
+        desc = "A Beefalo tendency.",
+        sample = {"\"RIDER\"", "\"ORNERY\"", "\"DEFAULT\"", "\"PUDGY\""},
+        optional = true,
+        default = "\"RIDER\"",
+    },
+    toggle = {
+        type = "boolean",
+        desc = "If true, turn the mode on. If false, turn the mode off.",
+        sample = {"true", "false"},
+    },
+    verbose = {
+        type = "boolean",
+        desc = "If true, print all commands' help information. Otherwise just print the name.",
+        optional = true,
+        default = false,
+    },
+}
 
--- Populated after all the other functions have been declared.
--- This is for a more Python-style `help` utility where you pass the function
--- object directly.
----@type {[function]: string}
-CustomCmd.Docs.Aliases = {}
+---@class Caller
+---@field doc DocString
+---@field fn function
+
+local Callers = {}
+
+-- Populated at the very end of this file, when all the functions are known.
+---@type Map<Caller, string>
+Callers.aliases = {}
+
+---@type metatable
+Callers.mt = {
+    ---@param t Caller
+    ---@param ... any
+    __call = function(t, ...) return t.fn(...) end,
+    
+    ---@param t Caller
+    __tostring = function(t) return "CustomCmd." .. Callers.aliases[t] end,
+}
+
+---@param caller Caller
+function Callers.new(caller)
+    ---@type Caller
+    return _G.setmetatable(caller, Callers.mt)
+end
+
+function Callers.is_instance(t)
+    return _G.getmetatable(t) == Callers.mt
+end
+
+CustomCmd.count_all = Callers.new({
+    doc = {
+        params = {"prefab", "prefabs..."},
+        sample = {
+            "%s(\"pigman\")",
+            "%s(\"pigman\", \"spider\", \"beefalo\")",
+        },
+    },
+    fn = CustomCmd.Count.make_fn("count_all", false),
+})
+
+CustomCmd.remove_all = Callers.new({
+    doc = CustomCmd.count_all.doc,
+    fn = CustomCmd.Count.make_fn("remove_all", true)
+})
 
 --- HELP UTILITIES -------------------------------------------------------- {{{1
 
@@ -38,90 +161,110 @@ function CustomCmd.print_param(name, param)
     end
 end
 
----@param cmd string|function Docs key or alias function.
+---@param cmd string|Caller Docs key or caller instance.
 function CustomCmd.get_usage(cmd)
-    local key = cmd
-    if type(key) == "string" then
+    local key, caller = cmd, nil
+    if type(cmd) == "string" then
         if key:find("^CustomCmd%.") then
             key = key:gsub("^CustomCmd%.", "")
         end
+        ---@type Caller
+        caller = CustomCmd[key]
     else
-        key = CustomCmd.Docs.Aliases[key]
+        ---@type string, Caller
+        key, caller = Callers.aliases[key], cmd
     end
-    local usage = CustomCmd.Docs.Commands[key]
-    if not usage then
-        CustomCmd.Util.printf("Unknown custom command '%s'.", tostring(cmd))
-        print("See CustomCmd.list().")
-        return nil, nil
+    if not Callers.is_instance(caller) then
+        return nil
     end
-    return key, usage
+    return caller
 end
 
----@param cmd string|function Key into `CustomCmd.Docs.Commands`/`CustomCmd.Docs.Aliases`.
+---@param cmd string|Caller Docs key or caller instance.
 function CustomCmd.print_usage(cmd)
-    local field, usage = CustomCmd.get_usage(cmd)
-    if not (field and usage) then
+    local caller = CustomCmd.get_usage(cmd)
+    if not caller then
+        CustomCmd.Util.printf("Unknown custom command '%s'.", tostring(cmd))
+        CustomCmd.Util.printf("See %s().", tostring(CustomCmd.list))
         return
     end
 
     CustomCmd.Util.printf("---SYNTAX---")
-    local _params = {} -- silly but need to print `prefabs` as `...`
-    for _, v in ipairs(usage.params) do
-        _params[#_params + 1] = CustomCmd.Docs.Params[v].isvararg and "..." or v
+    local _params = {} -- silly but need to print `prefabs...` as `...`
+    for _, v in ipairs(caller.doc.params) do
+        _params[#_params + 1] = Params[v].isvararg and "..." or v
     end
-    CustomCmd.Util.printf("CustomCmd.%s(%s)", field, table.concat(_params, ", "))
+    CustomCmd.Util.printf("%s(%s)", tostring(caller), table.concat(_params, ", "))
 
     CustomCmd.Util.printf("---PARAMS---")
-    if #usage.params > 0 then
-        for _, key in ipairs(usage.params) do
-            CustomCmd.print_param(key, CustomCmd.Docs.Params[key])
+    if #caller.doc.params > 0 then
+        for _, key in ipairs(caller.doc.params) do
+            CustomCmd.print_param(key, Params[key])
         end
     else
         print("No parameters.")
     end
 
     CustomCmd.Util.printf("---SAMPLE---")
-    for _, v in ipairs(usage.sample) do
-        CustomCmd.Util.printf("CustomCmd.%s", v:format(field))
+    for _, v in ipairs(caller.doc.sample) do
+        CustomCmd.Util.printf("%s", v:format(tostring(caller)))
     end
 
     CustomCmd.Util.printf("---RETURN---")
-    if usage.retval then
-        CustomCmd.print_param("retval", usage.retval)
+    if caller.doc.retval then
+        CustomCmd.print_param("retval", caller.doc.retval)
     else
         print("No return value/s.")
     end
 end
 
----@param verbose boolean?
-function CustomCmd.list(verbose)
-    print("---COMMANDS LIST---")
-    for k in pairs(CustomCmd.Docs.Commands) do
-        if verbose then
-            CustomCmd.print_usage(k)
-            print()
-        else
-            print(k)
+CustomCmd.list = Callers.new({
+    doc = {
+        params = {"verbose"},
+        sample = {"%s()", "%s(true)", "%s(false)"},
+    },
+    ---@param verbose boolean?
+    fn = function(verbose)
+        print("---COMMANDS LIST---")
+        for k, v in pairs(CustomCmd) do
+            if Callers.is_instance(v) then
+                if verbose then
+                    CustomCmd.print_usage(k)
+                    print()
+                else
+                    print(k)
+                end
+            end
         end
-    end
-end
+    end,
+})
 
----@param what? string|function
-function CustomCmd.help(what)
-    if not what then
-        print("---CUSTOMCMD HELP---")
-        print("Usage: CustomCmd.<command>(<arguments...>)")
-        print("\tE.g: CustomCmd.give_all(\"meat\", 4)")
-        print("For a list of all available commands:")
-        print("\tCustomCmd.list()")
-        print("For individual command help:")
-        print("\tCustomCmd.help(<command>)")
-        print("\tE.g: CustomCmd.help(\"give_to\")")
-        CustomCmd.list()
-        return
-    end
-    CustomCmd.print_usage(what)
-end
+CustomCmd.help = Callers.new({
+    doc = {
+        params = {"command"},
+        sample = {
+            "%s(\"give_to\")",
+            "%s(\"CustomCmd.get_tags\")",
+            "%s(CustomCmd.remove_all\")",
+        },
+    },
+    ---@param what? string|Caller
+    fn = function(what)
+        if not what then
+            print("---CUSTOMCMD HELP---")
+            print("Usage: CustomCmd.<command>(<arguments...>)")
+            print("\tE.g: CustomCmd.give_all(\"meat\", 4)")
+            print("For a list of all available commands:")
+            print("\tCustomCmd.list()")
+            print("For individual command help:")
+            print("\tCustomCmd.help(<command>)")
+            print("\tE.g: CustomCmd.help(\"give_to\")")
+            CustomCmd.list()
+            return
+        end
+        CustomCmd.print_usage(what)
+    end,
+})
 
 -- 1}}} ------------------------------------------------------------------------
 
@@ -168,88 +311,130 @@ function _tags.mt.__tostring(t)
     return table.concat(s, ", ")
 end
 
--- Pass an entity to get the tags of.
----@param inst table
-function CustomCmd.get_tags(inst)
-    if not (inst and type(inst) == "table") then
-        CustomCmd.print_usage("get_tags")
-        return nil
-    end
-    return _tags.new(inst)
-end
-
-function CustomCmd.add_tags(inst, tag, ...)
-    if not (inst and tag) then
-        CustomCmd.print_usage("add_tags")
-        return
-    end
-    for _, v in ipairs{tag, ...} do
-        if inst:HasTag(v) then
-            CustomCmd.Util.printf("%s already has tag '%s'!", tostring(inst), v)
-        else
-            inst:AddTag(v)
+CustomCmd.get_tags = Callers.new({
+    doc = {   
+        params = {"inst"},
+        sample = {
+            "%s(ThePlayer)",
+            "%s(c_find(\"beefalo\"))",
+            "%s(c_select())",
+        },
+        retval = {
+            type = "table<string, boolean>",
+            desc = "A key-value table. Each key is the tag, each value is `true`.",
+        }
+    },
+    -- Pass an entity to get the tags of.
+    ---@param inst table
+    fn = function(inst) 
+        if not (inst and type(inst) == "table") then
+            CustomCmd.print_usage("get_tags")
+            return nil
         end
-    end
-end
+        return _tags.new(inst)
+    end,
+})
 
-function CustomCmd.remove_tags(inst, tag, ...)
-    if not (inst and tag) then
-        CustomCmd.print_usage("remove_tags")
-        return
-    end
-    for _, v in ipairs{tag, ...} do
-        if not inst:HasTag(v) then
-            CustomCmd.Util.printf("%s does not have tag '%s'!", tostring(inst), v)
-        else
-            inst:RemoveTag(v)
+
+CustomCmd.add_tags = Callers.new({
+    doc = {
+        params = {"inst", "tag", "tags..."},
+        sample = {
+            "%s(ThePlayer, \"merm\", \"beefalo\")",
+            "%s(c_findnext(\"merm\"), \"pigman\")",
+            "%s(AllPlayers[2], \"player\")",
+        },
+    },
+    ---@param inst table
+    ---@param tag string
+    ---@param ... string
+    fn = function(inst, tag, ...)
+        if not (inst and tag) then
+            CustomCmd.print_usage("add_tags")
+            return
         end
-    end
-end
+        for _, v in ipairs{tag, ...} do
+            if inst:HasTag(v) then
+                CustomCmd.Util.printf("%s already has tag '%s'!", tostring(inst), v)
+            else
+                inst:AddTag(v)
+            end
+        end
+    end,
+})
+
+CustomCmd.remove_tags = Callers.new({
+    doc = CustomCmd.add_tags.doc,
+    fn = function(inst, tag, ...)
+        if not (inst and tag) then
+            CustomCmd.print_usage("remove_tags")
+            return
+        end
+        for _, v in ipairs{tag, ...} do
+            if not inst:HasTag(v) then
+                CustomCmd.Util.printf("%s does not have tag '%s'!", tostring(inst), v)
+            else
+                inst:RemoveTag(v)
+            end
+        end
+    end,
+})
 
 --- 1}}} -----------------------------------------------------------------------
 
 --- ITEM FUNCTIONS -------------------------------------------------------- {{{1
 
----@param player_number integer
----@param prefab string
----@param count? integer
-function CustomCmd.give_to(player_number, prefab, count)
-    if player_number == nil then
-        CustomCmd.print_usage("give_to")
-        return
-    end
-    local player = CustomCmd.Check.player(player_number)
-    prefab = CustomCmd.Check.prefab(prefab)
-    count = CustomCmd.Check.count(count)
-    -- All 3 validation functions return the appropriate handles/fallbacks,
-    -- and return `nil` if a non-`nil` input was invalid for that use case.
-    if not (player and prefab and count) then
-        return
-    end
-    CustomCmd.Util.give_item(player, prefab, count)
-end
+CustomCmd.give_to = Callers.new({
+    doc = {
+        params = {"player_number", "prefab", "item_count"},
+        sample = {"%s(1, \"log\")", "%s(3, \"meat\", 20)"},
+    },
 
----@param prefab string
----@param count? integer
-function CustomCmd.give_all(prefab, count)
-    if prefab == nil then
-        CustomCmd.print_usage("give_all")
-        return
-    end
-    -- All validation functions print error messages
-    prefab = CustomCmd.Check.prefab(prefab)
-    count = CustomCmd.Check.count(count)
-    -- Validation functions return fallback values if the params were `nil`.
-    if not (prefab and count) then
-        return
-    elseif #_G.AllPlayers == 0 then
-        print("There are no players in the server to give items to!")
-        return
-    end
-    for _, player in ipairs(_G.AllPlayers) do
+    ---@param player_number integer
+    ---@param prefab string
+    ---@param count? integer
+    fn = function(player_number, prefab, count)
+        if player_number == nil then
+            CustomCmd.print_usage("give_to")
+            return
+        end
+        local player = CustomCmd.Check.player(player_number)
+        prefab = CustomCmd.Check.prefab(prefab)
+        count = CustomCmd.Check.count(count)
+        -- All 3 validation functions return the appropriate handles/fallbacks,
+        -- and return `nil` if a non-`nil` input was invalid for that use case.
+        if not (player and prefab and count) then
+            return
+        end
         CustomCmd.Util.give_item(player, prefab, count)
-    end
-end
+    end,
+})
+
+CustomCmd.give_all = Callers.new({
+    doc = {
+        params = {"prefab", "item_count"},
+        sample = {"%s(\"log\")", "%s(\"meat\", 20)"},
+    },
+    ---@param prefab string
+    ---@param count? integer
+    fn = function(prefab, count)
+        if prefab == nil then
+            CustomCmd.print_usage("give_all")
+            return
+        end
+        prefab = CustomCmd.Check.prefab(prefab)
+        count = CustomCmd.Check.count(count)
+        if not (prefab and count) then
+            return
+        elseif #_G.AllPlayers == 0 then
+            print("There are no players in the server to give items to!")
+            return
+        end
+        for _, player in ipairs(_G.AllPlayers) do
+            CustomCmd.Util.give_item(player, prefab, count)
+        end
+    end,
+})
 
 --- 1}}} -----------------------------------------------------------------------
 
@@ -262,104 +447,129 @@ function CustomCmd.print_toggle(what, status)
     CustomCmd.Util.printf("%s - Set everyone's %s to '%s'.", shard, what, tostring(status))
 end
 
--- See: https://github.com/penguin0616/dst_gamescripts/blob/master/consolecommands.lua#L354
----@param toggle boolean
-function CustomCmd.set_creative(toggle)
-    if type(toggle) ~= "boolean" then
-        print("CustomCmd.set_creative(): `toggle` must be a boolean.")
-        return
-    end
-
-    for _, player in ipairs(_G.AllPlayers) do
-        player.components.builder.freebuildmode = toggle
-        player:PushEvent("techlevelchange")
-    end
-    
-    CustomCmd.print_toggle("creative mode", toggle)
-end
-
-function CustomCmd.creative_on()
-    CustomCmd.set_creative(true)
-end
-
-function CustomCmd.creative_off()
-    CustomCmd.set_creative(false)
-end
-
--- Please refer to the following:
--- https://github.com/penguin0616/dst_gamescripts/blob/master/components/health.lua#L116
--- https://github.com/penguin0616/dst_gamescripts/blob/master/components/health.lua#L355
--- https://github.com/penguin0616/dst_gamescripts/blob/master/components/sanity.lua#L232
--- https://github.com/penguin0616/dst_gamescripts/blob/master/components/hunger.lua#L113
-function CustomCmd.set_godmode(toggle)
-    if type(toggle) ~= "boolean" then
-        print("CustomCmd.set_godmode(): `toggle` must be a boolean.")
-        return
-    end
-
-    for _, player in ipairs(_G.AllPlayers) do
-        player.components.health:SetInvincible(toggle)
-        if toggle then
-            player.components.health:SetPercent(1)
-            player.components.sanity:SetPercent(1)
-            player.components.hunger:SetPercent(1)
-            player.components.moisture:SetPercent(0)
+CustomCmd.set_creative = Callers.new({
+    doc = {
+        params = {},
+        sample = {"%s()"},
+    },
+    -- See: https://github.com/penguin0616/dst_gamescripts/blob/master/consolecommands.lua#L354
+    ---@param toggle boolean
+    fn = function(toggle)
+        if type(toggle) ~= "boolean" then
+            print("CustomCmd.set_creative(): `toggle` must be a boolean.")
+            return
         end
+
+        for _, player in ipairs(_G.AllPlayers) do
+            player.components.builder.freebuildmode = toggle
+            player:PushEvent("techlevelchange")
+        end
+        
+        CustomCmd.print_toggle("creative mode", toggle)
     end
-    CustomCmd.print_toggle("godmode", toggle)
-end
 
-function CustomCmd.godmode_on()
-    CustomCmd.set_godmode(true)
-end
+})
 
-function CustomCmd.godmode_off()
-    CustomCmd.set_godmode(false)
-end
+CustomCmd.set_godmode = Callers.new({
+    doc = CustomCmd.set_creative.doc,
+    -- Please refer to the following:
+    -- https://github.com/penguin0616/dst_gamescripts/blob/master/components/health.lua#L116
+    -- https://github.com/penguin0616/dst_gamescripts/blob/master/components/health.lua#L355
+    -- https://github.com/penguin0616/dst_gamescripts/blob/master/components/sanity.lua#L232
+    -- https://github.com/penguin0616/dst_gamescripts/blob/master/components/hunger.lua#L113
+    fn = function(toggle)
+        if type(toggle) ~= "boolean" then
+            print("CustomCmd.set_godmode(): `toggle` must be a boolean.")
+            return
+        end
+
+        for _, player in ipairs(_G.AllPlayers) do
+            player.components.health:SetInvincible(toggle)
+            if toggle then
+                player.components.health:SetPercent(1)
+                player.components.sanity:SetPercent(1)
+                player.components.hunger:SetPercent(1)
+                player.components.moisture:SetPercent(0)
+            end
+        end
+        CustomCmd.print_toggle("godmode", toggle)
+    end,
+})
+
+CustomCmd.creative_on = Callers.new({
+    doc = {
+        params = {"toggle"},
+        sample = {"%s(true)", "%s(false)"},
+    },
+    fn = function() CustomCmd.set_creative(true) end,
+})
+
+CustomCmd.creative_off = Callers.new({
+    doc = CustomCmd.creative_on.doc,
+    fn = function() CustomCmd.set_creative(false) end,
+})
+
+CustomCmd.godmode_on = Callers.new({
+    doc = CustomCmd.creative_on.doc,
+    fn = function() CustomCmd.set_godmode(true) end
+})
+
+CustomCmd.godmode_off = Callers.new({
+    doc = CustomCmd.creative_on.doc,
+    fn = function() CustomCmd.set_godmode(false) end
+})
 
 --- 1}}} -----------------------------------------------------------------------
 
 --- BEEFALO FUNCTIONS ----------------------------------------------------- {{{1
 
----@param player_number integer
----@param tendency "RIDER"|"ORNERY"|"DEFAULT"|"PUDGY"
----@param saddle "saddle_basic"|"saddle_race"|"saddle_war"|"basic"|"race"|"war"
-function CustomCmd.spawn_beef(player_number, tendency, saddle)
-    if player_number == nil then
-        CustomCmd.print_usage("spawn_beef")
-        return
+CustomCmd.spawn_beef = Callers.new({
+    doc = {
+        params = {"player_number", "tendency", "saddle"},
+        sample = {
+            "%s(1, \"RIDER\", \"saddle_race\")",
+            "%s(3, \"ORNERY\")",
+            "%s(2, nil, \"saddle_war\")",
+        },
+    },
+
+    ---@param player_number integer
+    ---@param tendency "RIDER"|"ORNERY"|"DEFAULT"|"PUDGY"
+    ---@param saddle "saddle_basic"|"saddle_race"|"saddle_war"|"basic"|"race"|"war"
+    fn = function(player_number, tendency, saddle)
+        if player_number == nil then
+            CustomCmd.print_usage("spawn_beef")
+            return
+        end
+        -- No fallback: get `nil` if `player_number` is invalid index to `AllPlayers`
+        local player = CustomCmd.Check.player(player_number)
+        tendency = CustomCmd.Check.tendency(tendency)
+        saddle = CustomCmd.Check.saddle(saddle)
+        -- If any of the 3 are `nil`, this check will pass and we'll early return
+        if not (player and tendency and saddle) then
+            return
+        end
+        -- Need handle to this specific beefalo instance, we'll modify it a ton
+        local beef = _G.c_spawn("beefalo")
+
+        -- dedi server defaults to 0,0,0 so move beefalo to player in question
+        beef.Transform:SetPosition(player.Transform:GetWorldPosition())
+
+        -- Domestication proper, unsure if need this exact order though
+        beef.components.domesticatable:DeltaDomestication(1)
+        beef.components.domesticatable:DeltaObedience(1)
+        beef.components.domesticatable:DeltaTendency(tendency, 1)
+        beef:SetTendency()
+        beef.components.domesticatable:BecomeDomesticated()
+        -- beef.components.hunger:SetHunger(0.5) -- Seems like this one doesn't exist anymore.
+        beef.components.rideable:SetSaddle(nil, _G.SpawnPrefab(saddle))
+        CustomCmd.Util.give_item(player, "beef_bell")
     end
-    -- No fallback: get `nil` if `player_number` is invalid index to `AllPlayers`
-    local player = CustomCmd.Check.player(player_number)
-    tendency = CustomCmd.Check.tendency(tendency)
-    saddle = CustomCmd.Check.saddle(saddle)
-    -- If any of the 3 are `nil`, this check will pass and we'll early return
-    if not (player and tendency and saddle) then
-        return
-    end
-    -- Need handle to this specific beefalo instance, we'll modify it a ton
-    local beef = _G.c_spawn("beefalo")
-
-    -- dedi server defaults to 0,0,0 so move beefalo to player in question
-    beef.Transform:SetPosition(player.Transform:GetWorldPosition())
-
-    -- Domestication proper, unsure if need this exact order though
-    beef.components.domesticatable:DeltaDomestication(1)
-    beef.components.domesticatable:DeltaObedience(1)
-    beef.components.domesticatable:DeltaTendency(tendency, 1)
-    beef:SetTendency()
-    beef.components.domesticatable:BecomeDomesticated()
-    -- beef.components.hunger:SetHunger(0.5) -- Seems like this one doesn't exist anymore.
-    beef.components.rideable:SetSaddle(nil, _G.SpawnPrefab(saddle))
-    CustomCmd.Util.give_item(player, "beef_bell")
-end
-
+})
 --- 1}}} -----------------------------------------------------------------------
 
-for k in pairs(CustomCmd.Docs.Commands) do
-    if type(CustomCmd[k] == "function") then
-        CustomCmd.Docs.Aliases[CustomCmd[k]] = k
-    else
-        error("Attempt to assign alias for a non-function!")
+for k, v in pairs(CustomCmd) do
+    if Callers.is_instance(v) then
+        Callers.aliases[v] = k
     end
 end
