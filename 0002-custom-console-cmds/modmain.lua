@@ -21,30 +21,63 @@ CustomCmd.Docs.Aliases = {}
 
 --- HELP UTILITIES -------------------------------------------------------- {{{1
 
----@param field string|function Key into `CustomCmd.Docs.Commands` or `CustomCmd.Docs.Aliases`.
-function CustomCmd.print_usage(field)
-    if type(field) == "string" and field:find("^CustomCmd%.") then
-        field = field:gsub("^CustomCmd%.", "")
-    elseif type(field) == "function" then
-        field = CustomCmd.Docs.Aliases[field]
+---@param name string
+---@param param ParamInfo
+function CustomCmd.print_param(name, param)
+    if param.optional then
+        CustomCmd.Util.printf("[%s]: %s", name, param.type)
+    else
+        CustomCmd.Util.printf("<%s>: %s", name, param.type)
     end
-    local usage = CustomCmd.Docs.Commands[field]
+    CustomCmd.Util.printf("\t%s", param.desc)
+    if param.sample then
+        CustomCmd.Util.printf("\tE.g. %s", table.concat(param.sample, ", "))
+    end
+    if param.default then
+        CustomCmd.Util.printf("\tDefaults to %s if not specified.", param.default)
+    end
+end
+
+---@param cmd string|function Docs key or alias function.
+function CustomCmd.get_usage(cmd)
+    local key = cmd
+    if type(key) == "string" then
+        if key:find("^CustomCmd%.") then
+            key = key:gsub("^CustomCmd%.", "")
+        end
+    else
+        key = CustomCmd.Docs.Aliases[key]
+    end
+    local usage = CustomCmd.Docs.Commands[key]
     if not usage then
-        CustomCmd.Util.printf("Unknown custom command '%s'.", field)
+        CustomCmd.Util.printf("Unknown custom command '%s'.", tostring(cmd))
         print("See CustomCmd.list_commands().")
+        return nil, nil
+    end
+    return key, usage
+end
+
+---@param cmd string|function Key into `CustomCmd.Docs.Commands`/`CustomCmd.Docs.Aliases`.
+function CustomCmd.print_usage(cmd)
+    local field, usage = CustomCmd.get_usage(cmd)
+    if not (field and usage) then
         return
     end
 
     CustomCmd.Util.printf("---SYNTAX---")
     local _params = {} -- silly but need to print `prefabs` as `...`
     for _, v in ipairs(usage.params) do
-        _params[#_params + 1] = CustomCmd.Docs.Params[v].name == "..." and "..." or v
+        _params[#_params + 1] = CustomCmd.Docs.Params[v].isvararg and "..." or v
     end
     CustomCmd.Util.printf("CustomCmd.%s(%s)", field, table.concat(_params, ", "))
 
     CustomCmd.Util.printf("---PARAMS---")
-    for _, key in ipairs(usage.params) do
-        CustomCmd.Util.print_param(CustomCmd.Docs.Params[key])
+    if #usage.params > 0 then
+        for _, key in ipairs(usage.params) do
+            CustomCmd.print_param(key, CustomCmd.Docs.Params[key])
+        end
+    else
+        print("No parameters.")
     end
 
     CustomCmd.Util.printf("---SAMPLE---")
@@ -52,9 +85,11 @@ function CustomCmd.print_usage(field)
         CustomCmd.Util.printf("CustomCmd.%s", v:format(field))
     end
 
+    CustomCmd.Util.printf("---RETURN---")
     if usage.retval then
-        CustomCmd.Util.printf("---RETURN---")
-        CustomCmd.Util.print_param(usage.retval)
+        CustomCmd.print_param("retval", usage.retval)
+    else
+        print("No return value/s.")
     end
 end
 

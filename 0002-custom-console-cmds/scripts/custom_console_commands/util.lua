@@ -9,22 +9,6 @@ function Util.printf(fmt, ...)
     print(fmt:format(...))
 end
 
----@param param ParamInfo
-function Util.print_param(param)
-    if param.optional then
-        Util.printf("[%s]: %s", param.name, param.type)
-    else
-        Util.printf("<%s>: %s", param.name, param.type)
-    end
-    Util.printf("\t%s", param.desc)
-    if param.sample then
-        Util.printf("\tE.g. %s", table.concat(param.sample, ", "))
-    end
-    if param.default then
-        Util.printf("\tDefaults to %s if not specified.", param.default)
-    end
-end
-
 -- For pretty printing/announcing so players know which shard the command is 
 -- coming from. Many commands only affect the shard they were run in.
 function Util.get_shard()
