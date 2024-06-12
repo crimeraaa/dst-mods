@@ -2,10 +2,7 @@
 -- Note that any modules loaded by `require` can "inherit" this global variable.
 -- Which is useful so I don't have to constantly rewrite this line.
 _G = GLOBAL
-
--- For some reason, `require` didn't import non-local functions?
--- Whatever, I'll just return a table acting as a namespace then...
-CustomCmd.Count = require("countprefabs")
+CountPrefabs = require("countprefabs")
 
 ---- MOD CONFIGURATIONS --------------------------------------------------------
 
@@ -113,16 +110,13 @@ Modes: 0 for global chat (default), 1 for whisper chat, 2 for local chat.]],
         local prefab = validate_prefab(params.prefab)
         local mode = validate_mode(params.mode)
 
-        -- If both validation functions returned nil, something went wrong.
+        -- If either validation functions returned nil, something went wrong.
         -- They already send error messages so we don't need to do anything.
-        if prefab == nil and mode == nil then
+        if not (prefab and mode) then
             return
         end
 
-        local tally = CustomCmd.Count:make_tally(
-            prefab, 
-            CustomCmd.Count:get_client_ents()
-        )
+        local tally = CountPrefabs.make_tally(prefab, CountPrefabs.get_client_ents())
         make_announcement(mode, tally)
     end, 
 }) 
@@ -161,9 +155,9 @@ local function make_announce_act(index)
             if target == nil or target.prefab == nil then
                 return
             end
-            local tally = CustomCmd.Count:make_tally(
+            local tally = CountPrefabs.make_tally(
                 target.prefab, 
-                CustomCmd.Count:get_client_ents(), 
+                CountPrefabs.get_client_ents(), 
                 false
             )
             make_announcement(mode, tally)

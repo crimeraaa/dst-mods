@@ -20,15 +20,23 @@
 -- Also to help you know about any quirks to take note of.
 ---@type Dictionary<DocString>
 local Commands = {
+    help = {
+        params = {"command"},
+        sample = {
+            "%s(\"give_to\")",
+            "%s(\"CustomCmd.get_tags\")",
+            "%s(CustomCmd.remove_all\")",
+        },
+    },
     count_all = {
-        params = {"prefab", "prefabs"},
+        params = {"prefab", "prefabs..."},
         sample = {
             "%s(\"pigman\")",
             "%s(\"pigman\", \"spider\", \"beefalo\")",
         },
     },
     remove_all = {
-        params = {"prefab", "prefabs"},
+        params = {"prefab", "prefabs..."},
         sample = {
             "%s(\"pigman\")",
             "%s(\"pigman\", \"spider\", \"beefalo\")",
@@ -46,6 +54,20 @@ local Commands = {
             type = "table<string, boolean>",
             desc = "A key-value table. Each key is the tag, each value is `true`.",
         }
+    },
+    add_tags = {
+        params = {"inst", "tag", "tags..."},
+        sample = {
+            "%s(ThePlayer, \"merm\", \"beefalo\")",
+            "%s(c_findnext(\"merm\"), \"pigman\")",
+        },
+    },
+    remove_tags = {
+        params = {"inst", "tag", "tags..."},
+        sample = {
+            "%s(ThePlayer, \"player\")",
+            "%s(c_select(), \"inspectable\", \"freezable\")",
+        },
     },
     give_to = {
         params = {"player_number", "prefab", "item_count"},
@@ -67,6 +89,14 @@ local Commands = {
 
 ---@type Dictionary<ParamInfo>
 local Params = {
+    command = {
+        name = "command",
+        type = "string|function",
+        desc = "A key into CustomCmd, sample string usage, or a function thereof.",
+        sample = {"\"give_to\"", "\"CustomCmd.count_all\"", "CustomCmd.get_tags"},
+        optional = true,
+        default = "calling CustomCmd.list_commands()",
+    },
     prefab = {
         name = "prefab",
         type = "string",
@@ -78,6 +108,12 @@ local Params = {
         type = "table",
         desc = "An entity instance.",
         sample = {"ThePlayer", "c_find(\"beefalo\")"},
+    },
+    tag = {
+        name = "tag",
+        type = "string",
+        desc = "An entity tag.",
+        sample = {"\"beefalo\"", "\"merm\""},
     },
     item_count = {
         name = "item_count",
@@ -108,12 +144,18 @@ local Params = {
         optional = true,
         default = "\"saddle_race\"",
     },
-    prefabs = {
+    ["prefabs..."] = {
         name = "...",
         type = "string",
-        desc = "0 or more other prefabs to also count.",
+        desc = "0 or more other prefabs.",
         optional = true,
     },
+    ["tags..."] = {
+        name = "...",
+        type = "string",
+        desc = "0 or more other tags.",
+        optional = true,
+    }
 }
 
 return {Commands = Commands, Params = Params}
