@@ -5,13 +5,13 @@ local Util = {}
 -- access `io.stdout.write` from DST.
 ---@param fmt string String literal or C-style format string.
 ---@param ... string|number Arguments to C-style format string, if any.
-function Util.printf(fmt, ...)
+function Util:printf(fmt, ...)
     print(fmt:format(...))
 end
 
 -- For pretty printing/announcing so players know which shard the command is 
 -- coming from. Many commands only affect the shard they were run in.
-function Util.get_shard()
+function Util:get_shard()
     if _G.TheWorld:HasTag("forest") then 
         return "SURFACE"
     elseif _G.TheWorld:HasTag("cave") then 
@@ -29,13 +29,13 @@ end
 -- e.g. bonded Beefalo, players, pigmen, merms, etc.
 -- This gets the generic prefab display name.
 ---@param prefab string
-function Util.get_display(prefab)
+function Util:get_display(prefab)
     -- I'm assuming that the valid prefab check was already run beforehand
     -- Need upper because all the keys in `STRINGS.NAMES` are uppercase.
-    local display = _G.STRINGS.NAMES[string.upper(prefab)]
+    local display = _G.STRINGS.NAMES[prefab:upper()]
     -- Some valid prefabs don't have display names
     if not display then 
-        Util.printf("Prefab '%s' has no Display Name!", prefab)
+        self:printf("Prefab '%s' has no Display Name!", prefab)
     end
     -- If no display name (i.e. it's `nil`), we'll just use `"Missing Name"`.
     return display or "Missing Name"
@@ -43,7 +43,7 @@ end
 
 -- Given an entity `inst`, get the string in between `"Tags:"` and `"\n"`.
 ---@return string
-function Util.get_debugstring_tags(inst)
+function Util:get_debugstring_tags(inst)
     -- Throaway values so we can skip to the 3rd return value of `string.find`.
     local i, j
     ---@type string
@@ -57,7 +57,7 @@ end
 ---@param player table
 ---@param prefab string
 ---@param count? integer Falls back to 1. I'm assuming the non-negative check was run.
-function Util.give_item(player, prefab, count)
+function Util:give_item(player, prefab, count)
     for i = 1, count or 1, 1 do
         player.components.inventory:GiveItem(_G.SpawnPrefab(prefab))
     end
