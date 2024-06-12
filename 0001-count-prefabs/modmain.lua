@@ -5,7 +5,7 @@ _G = GLOBAL
 
 -- For some reason, `require` didn't import non-local functions?
 -- Whatever, I'll just return a table acting as a namespace then...
-CountPrefabs = require("countprefabs")
+CustomCmd.Count = require("countprefabs")
 
 ---- MOD CONFIGURATIONS --------------------------------------------------------
 
@@ -119,9 +119,9 @@ Modes: 0 for global chat (default), 1 for whisper chat, 2 for local chat.]],
             return
         end
 
-        local tally = CountPrefabs:make_tally(
+        local tally = CustomCmd.Count:make_tally(
             prefab, 
-            CountPrefabs:get_client_ents()
+            CustomCmd.Count:get_client_ents()
         )
         make_announcement(mode, tally)
     end, 
@@ -161,9 +161,9 @@ local function make_announce_act(index)
             if target == nil or target.prefab == nil then
                 return
             end
-            local tally = CountPrefabs:make_tally(
+            local tally = CustomCmd.Count:make_tally(
                 target.prefab, 
-                CountPrefabs:get_client_ents(), 
+                CustomCmd.Count:get_client_ents(), 
                 false
             )
             make_announcement(mode, tally)

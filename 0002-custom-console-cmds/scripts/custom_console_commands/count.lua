@@ -1,16 +1,15 @@
----@diagnostic disable: duplicate-set-field
-CountPrefabs = {}
+local Count = {}
 
 -- Checks if `what` is indeed an instance of `prefab` and that it's not
 -- currently being held by someone or in a container.
-function CountPrefabs.is_countable(what, prefab)
+function Count.is_countable(what, prefab)
     return what.prefab == prefab and not (
         what.replica.inventoryitem and what.replica.inventoryitem:IsHeld()
     )
 end
 
 -- If no `replica.stackable` field exists, assume a stack is 1.
-function CountPrefabs.get_stacksize(whom)
+function Count.get_stacksize(whom)
     return whom.replica.stackable and whom.replica.stackable:StackSize() or 1
 end
 
@@ -18,13 +17,13 @@ end
 ---@param prefab string
 ---@param entities table
 ---@param remove boolean
-function CountPrefabs.get_counts(prefab, entities, remove)
+function Count.get_counts(prefab, entities, remove)
     local total = 0
     local stacks = 0
     for _, entity in pairs(entities) do
         -- if it's in a container/being held, we'll ignore it
-        if CountPrefabs.is_countable(entity, prefab) then
-            total  = total + CountPrefabs.get_stacksize(entity)
+        if Count.is_countable(entity, prefab) then
+            total  = total + Count.get_stacksize(entity)
             stacks = stacks + 1 
             if remove == true then
                 entity:Remove()
@@ -38,16 +37,16 @@ end
 -- e.g. bonded Beefalo, players, pigmen, merms, etc.
 -- This gets the generic prefab display name.
 ---@param prefab string
-function CountPrefabs.get_displayname(prefab) 
+function Count.get_displayname(prefab) 
     -- I'm assuming that the valid prefab check was already run beforehand
     -- Need upper because all the keys in `STRINGS.NAMES` are uppercase.
     local display = _G.STRINGS.NAMES[string.upper(prefab)]
     -- Some valid prefabs don't have display names
     if not display then 
-        local warning = string.format("Prefab '%s' has no Display Name!", prefab)
-        _G.ChatHistory:SendCommandResponse(warning)
+        local msg = string.format("Prefab '%s' has no Display Name!", prefab)
+        _G.ChatHistory:SendCommandResponse(msg)
         -- dedicated servers can't use `SendCommandResponse`, so do this instead
-        print(warning)
+        print(msg)
     end
     -- If no display name (i.e. it's `nil`), we'll just use `"Missing Name"`.
     return display or "Missing Name"
@@ -59,13 +58,13 @@ end
 ---@param prefab string
 ---@param entities table
 ---@param remove? boolean Pass `true` to also remove all instances of this prefab.
-function CountPrefabs.make_tally(prefab, entities, remove)
-    local world = Helper.get_shard()
-    local total, stacks = CountPrefabs.get_counts(prefab, entities, remove or false)
+function Count.make_tally(prefab, entities, remove)
+    local world = CustomCmd.Util.get_shard()
+    local total, stacks = Count.get_counts(prefab, entities, remove or false)
     local basic = "%s: There are %s."
 
     -- Reformat to display name then prefab, e.g. `"Beefalo ('beefalo')"`
-    prefab = string.format("%s ('%s')", CountPrefabs.get_displayname(prefab), prefab)
+    prefab = string.format("%s ('%s')", Count.get_displayname(prefab), prefab)
 
     -- Adjust our message's grammar so it looks right.
     if total == 0 then
@@ -92,4 +91,51 @@ function CountPrefabs.make_tally(prefab, entities, remove)
     return basic:format(world, prefab)
 end
 
-return CountPrefabs
+-- For caller, pack `prefab` and varargs into a table then pass that.
+---@param prefabs string[]
+---@param remove boolean
+local function helperfn(prefabs, remove) 
+    -- Record invalid inputs in order so user knows what went wrong
+    ---@type string[]
+    local invalid_inputs = {}
+    for _, prefab in ipairs(prefabs) do
+        -- DST's prefab strings are always lowercase.
+        -- If you input a non-string for some reason, that's handled too.
+        prefab = type(prefab) == "string" and string.lower(prefab) or tostring(prefab)
+
+        -- Don't complain in the middle of counting but take note of it.
+        if _G.Prefabs[prefab] == nil then
+            table.insert(invalid_inputs, string.format("'%s'", prefab))
+        else
+            _G.TheNet:Announce(CustomCmd.Count.make_tally(prefab, _G.Ents, remove))
+        end
+    end
+    -- Only print out error messages if we have at least 1 invalid input
+    if #invalid_inputs > 0 then
+        print("The following inputs were invalid:")
+        for i, v in ipairs(invalid_inputs) do
+            print(i, v)
+        end
+        print("Please make sure you have the correct names and/or spelling.")
+    end
+end
+
+-- Because `count_all` and `remove_all` have similar implementations, 
+-- we can use a function to create/return a new function definition.
+---@param fn_name string The function's name as a string, e.g. `"count_all"`.
+---@param remove boolean `true` if you want to remove prefabs, false otherwise.
+function Count.make_fn(fn_name, remove)
+    -- Need 1 argument before the varargs ala C-style varargs.
+    -- This also ensures we don't run the prefab count body with 0 arguments.
+    ---@param prefab string
+    ---@param ... string
+    return function(prefab, ...)
+        if prefab == nil or type(prefab) ~= "string" then
+            CustomCmd.print_usage(fn_name)
+            return
+        end
+        helperfn({prefab, ...}, remove)
+    end
+end
+
+return Count

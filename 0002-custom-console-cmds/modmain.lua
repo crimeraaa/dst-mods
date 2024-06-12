@@ -2,82 +2,122 @@
 -- be accessible from within any of this mod's scripts.
 
 _G = GLOBAL
-UsageStrings  = require("custom_console_commands/usagestrings")
-Helper        = require("custom_console_commands/helper")
-ValidateInput = require("custom_console_commands/validateinput")
-CountPrefabs  = require("custom_console_commands/countprefabs")
+_G.CustomCmd = {} -- expose to global env as mod env is sandboxed
 
-local make_prefabsfn = require("custom_console_commands/prefab_fns")
+CustomCmd = _G.CustomCmd
+CustomCmd.Docs  = require("custom_console_commands/docs")
+CustomCmd.Util  = require("custom_console_commands/util")
+CustomCmd.Check = require("custom_console_commands/check")
+CustomCmd.Count = require("custom_console_commands/count")
 
-_G.c_countall = make_prefabsfn("c_countall", false)
+CustomCmd.count_all = CustomCmd.Count.make_fn("count_all", false)
+CustomCmd.remove_all = CustomCmd.Count.make_fn("remove_all", true)
 
--- overwrite the original `c_removeall` from `consolecommands.lua`,
--- Need `AddSimPostInit` as console commands are loaded by then.
-AddSimPostInit(function()
-    _G.c_removeall = make_prefabsfn("c_removeall", true)
-end)
-
-function _G.c_listcmds()
-    print("---BEGIN LISTING---")
-    for k in pairs(UsageStrings) do
-        print(k)
+---@param field string A key into `CustomCmd.Docs.Commands`.
+function CustomCmd.print_usage(field)
+    local usage = CustomCmd.Docs.Commands[field]
+    if not usage then
+        CustomCmd.Util.printf("Unknown custom command '%s'.", field)
+        print("Try CustomCmd.list_commands().")
+        return
     end
-    print("---DONE LISTING---")
+
+    CustomCmd.Util.printf("---SYNTAX---")
+    local _params = {} -- silly but need to print `prefabs` as `...`
+    for _, v in ipairs(usage.params) do
+        _params[#_params + 1] = CustomCmd.Docs.Params[v].name == "..." and "..." or v
+    end
+    CustomCmd.Util.printf("CustomCmd.%s(%s)", field, table.concat(_params, ", "))
+
+    CustomCmd.Util.printf("---PARAMS---")
+    for _, key in ipairs(usage.params) do
+        CustomCmd.Util.print_param(CustomCmd.Docs.Params[key])
+    end
+
+    CustomCmd.Util.printf("---SAMPLE---")
+    for _, v in ipairs(usage.sample) do
+        CustomCmd.Util.printf("CustomCmd.%s", v:format(field))
+    end
+
+    if usage.retval then
+        CustomCmd.Util.printf("---RETURN---")
+        CustomCmd.Util.print_param(usage.retval)
+    end
+    -- Helper.printf("return:\n%s", usage.retval or "   (none)")
+end
+
+---@param verbose boolean?
+function CustomCmd.list_commands(verbose)
+    print("---COMMANDS LIST---")
+    for k in pairs(CustomCmd.Docs.Commands) do
+        if verbose then
+            CustomCmd.print_usage(k)
+        else
+            print(k)
+        end
+    end
 end
 
 ---@param what string
-function _G.c_helpcmd(what)
-    if not what:find("^c_") then
-        what = "c_" .. what
+function CustomCmd.help(what)
+    if not what then
+        CustomCmd.list_commands()
+        return
     end
-    Helper.print_usage(UsageStrings[what])
+    CustomCmd.print_usage(what)
 end
+
+---@alias Tags table<string, boolean>
+---@alias GUID integer
+
+---@type table<GUID, Tags>
+local memoized_tags = {}
 
 -- Pass an entity to get the tags of.
 ---@param inst table
-function _G.c_gettags(inst)
+function CustomCmd.get_tags(inst)
     if not (inst and type(inst) == "table") then
-        Helper.print_usage(UsageStrings.c_gettags)
+        CustomCmd.print_usage("get_tags")
         return nil
     end
-    -- The string between `"Tags: "` and `"\n"` in the debug string
-    local str = Helper.get_debugstring_tags(inst)
+    
     -- Contains the individual tags as seen from the debug string.
-    -- You only really need the keys as the keys are the tags.
-    ---@type table<string,boolean>
-    local tags = {}
+    -- You only really need the keys, as the keys themselves are the tags.
+    ---@type Tags
+    local tags = memoized_tags[inst.GUID] or {}
+
+    -- The string between `"Tags: "` and `"\n"` in the debug string
     -- `"%w+"` matches only "word" characters, that is:
     -- alphabeticals `[a-zA-Z]`, numericals `[0-9]` and underscores `[_]`.
-    for word in str:gmatch("%w+") do
+    for word in CustomCmd.Util.get_debugstring_tags(inst):gmatch("%w+") do
         tags[word] = true
     end
+    memoized_tags[inst.GUID] = tags
     return tags
 end
 
-function _G.c_addtags(inst, tag, ...)
+function CustomCmd.add_tags(inst, tag, ...)
     if not (inst and tag) then
-        -- Helper.print_usage(UsageStrings.c_addtags)
-        print("TODO: Usage string c_addtags")
+        CustomCmd.print_usage("add_tags")
         return
     end
     for _, v in ipairs{tag, ...} do
         if inst:HasTag(v) then
-            Helper.printf("%s already has tag '%s'!", tostring(inst), v)
+            CustomCmd.Util.printf("%s already has tag '%s'!", tostring(inst), v)
         else
             inst:AddTag(v)
         end
     end
 end
 
-function _G.c_removetags(inst, tag, ...)
+function CustomCmd.remove_tags(inst, tag, ...)
     if not (inst and tag) then
-        -- Helper.print_usage(UsageStrings.c_removetags)
-        print("TODO: Usage string c_removetags")
+        CustomCmd.print_usage("remove_tags")
         return
     end
     for _, v in ipairs{tag, ...} do
         if not inst:HasTag(v) then
-            Helper.printf("%s does not have tag '%s'!", tostring(inst), v)
+            CustomCmd.Util.printf("%s does not have tag '%s'!", tostring(inst), v)
         else
             inst:RemoveTag(v)
         end
@@ -87,32 +127,32 @@ end
 ---@param player_number integer
 ---@param prefab string
 ---@param count? integer
-function _G.c_giveto(player_number, prefab, count)
+function CustomCmd.give_to(player_number, prefab, count)
     if player_number == nil then
-        Helper.print_usage(UsageStrings.c_giveto)
+        CustomCmd.print_usage("give_to")
         return
     end
-    local player = ValidateInput.player(player_number)
-    prefab = ValidateInput.prefab(prefab)
-    count = ValidateInput.count(count)
+    local player = CustomCmd.Check.player(player_number)
+    prefab = CustomCmd.Check.prefab(prefab)
+    count = CustomCmd.Check.count(count)
     -- All 3 validation functions return the appropriate handles/fallbacks,
     -- and return `nil` if a non-`nil` input was invalid for that use case.
     if not (player and prefab and count) then
         return
     end
-    Helper.give_item(player, prefab, count)    
+    CustomCmd.Util.give_item(player, prefab, count)    
 end
 
 ---@param prefab string
 ---@param count? integer
-function _G.c_giveall(prefab, count)
+function CustomCmd.give_all(prefab, count)
     if prefab == nil then
-        Helper.print_usage(UsageStrings.c_giveall)
+        CustomCmd.print_usage("give_all")
         return
     end
     -- All validation functions print error messages
-    prefab = ValidateInput.prefab(prefab)
-    count = ValidateInput.count(count)
+    prefab = CustomCmd.Check.prefab(prefab)
+    count = CustomCmd.Check.count(count)
     -- Validation functions return fallback values if the params were `nil`.
     if not (prefab and count) then
         return
@@ -120,25 +160,23 @@ function _G.c_giveall(prefab, count)
         print("There are no players in the server to give items to!")
         return
     end
-    -- Marginally inefficient to call `_G.c_giveto` because of error checking,
-    -- but I'm sure it doesn't matter unless you infinite loop this command
     for _, player in ipairs(_G.AllPlayers) do
-        Helper.give_item(player, prefab, count)
+        CustomCmd.Util.give_item(player, prefab, count)
     end
 end
 
 ---@param player_number integer
 ---@param tendency "RIDER"|"ORNERY"|"DEFAULT"|"PUDGY"
 ---@param saddle "saddle_basic"|"saddle_race"|"saddle_war"|"basic"|"race"|"war"
-function _G.c_spawnbeef(player_number, tendency, saddle)
+function CustomCmd.spawn_beef(player_number, tendency, saddle)
     if player_number == nil then
-        Helper.print_usage(UsageStrings.c_spawnbeef)
+        CustomCmd.print_usage("spawn_beef")
         return
     end
     -- No fallback: get `nil` if `player_number` is invalid index to `AllPlayers`
-    local player = ValidateInput.player(player_number)
-    tendency = ValidateInput.tendency(tendency)
-    saddle = ValidateInput.saddle(saddle)
+    local player = CustomCmd.Check.player(player_number)
+    tendency = CustomCmd.Check.tendency(tendency)
+    saddle = CustomCmd.Check.saddle(saddle)
     -- If any of the 3 are `nil`, this check will pass and we'll early return
     if not (player and tendency and saddle) then
         return 
@@ -157,5 +195,5 @@ function _G.c_spawnbeef(player_number, tendency, saddle)
     beef.components.domesticatable:BecomeDomesticated()
     -- beef.components.hunger:SetHunger(0.5) -- Seems like this one doesn't exist anymore.
     beef.components.rideable:SetSaddle(nil, _G.SpawnPrefab(saddle))
-    Helper.give_item(player, "beef_bell")
+    CustomCmd.Util.give_item(player, "beef_bell")
 end
