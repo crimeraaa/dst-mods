@@ -102,7 +102,7 @@ local Params = {
         desc = "A key into CustomCmd, sample string usage, or a function thereof.",
         sample = {"\"give_to\"", "\"CustomCmd.count_all\"", "CustomCmd.get_tags"},
         optional = true,
-        default = "calling CustomCmd.list_commands()",
+        default = "calling CustomCmd.list()",
     },
     prefab = {
         type = "string",

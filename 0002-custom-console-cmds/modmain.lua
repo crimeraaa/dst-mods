@@ -51,7 +51,7 @@ function CustomCmd.get_usage(cmd)
     local usage = CustomCmd.Docs.Commands[key]
     if not usage then
         CustomCmd.Util.printf("Unknown custom command '%s'.", tostring(cmd))
-        print("See CustomCmd.list_commands().")
+        print("See CustomCmd.list().")
         return nil, nil
     end
     return key, usage
@@ -94,7 +94,7 @@ function CustomCmd.print_usage(cmd)
 end
 
 ---@param verbose boolean?
-function CustomCmd.list_commands(verbose)
+function CustomCmd.list(verbose)
     print("---COMMANDS LIST---")
     for k in pairs(CustomCmd.Docs.Commands) do
         if verbose then
@@ -113,11 +113,11 @@ function CustomCmd.help(what)
         print("Usage: CustomCmd.<command>(<arguments...>)")
         print("\tE.g: CustomCmd.give_all(\"meat\", 4)")
         print("For a list of all available commands:")
-        print("\tCustomCmd.list_commands()")
+        print("\tCustomCmd.list()")
         print("For individual command help:")
         print("\tCustomCmd.help(<command>)")
         print("\tE.g: CustomCmd.help(\"give_to\")")
-        CustomCmd.list_commands()
+        CustomCmd.list()
         return
     end
     CustomCmd.print_usage(what)
