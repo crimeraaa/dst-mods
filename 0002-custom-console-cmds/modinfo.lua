@@ -1,5 +1,5 @@
 -- Only set to `true` when developing.
-local mod_is_local = false
+local mod_is_local = true
 local mod_suffix = (mod_is_local and "Local") or "Server"
 
 ---- BASIC INFORMATION ---------------------------------------------------------
@@ -7,7 +7,9 @@ local mod_suffix = (mod_is_local and "Local") or "Server"
 -- Formatted string, e.g. `"Mod Template (Local)"`
 name = ("Custom Console Commands (%s)"):format(mod_suffix)
 author = "crimeraaa"
-description = "Rework of Custom Console Commands."
+description = [[
+Useful helper commands meant to be used purely from the console.
+Run either `CustomCmd:help()` or `CustomCmd:list()` for more information.]]
 icon_atlas = "customcmd.xml"
 icon = "customcmd.tex"
 
