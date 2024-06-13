@@ -1,4 +1,5 @@
-local mod_is_local = true
+-- Only set to `true` when developing.
+local mod_is_local = false
 local mod_suffix = (mod_is_local and "Local") or "Server"
 
 ---- BASIC INFORMATION ---------------------------------------------------------
@@ -7,12 +8,8 @@ local mod_suffix = (mod_is_local and "Local") or "Server"
 name = ("Custom Console Commands (%s)"):format(mod_suffix)
 author = "crimeraaa"
 description = "Rework of Custom Console Commands."
-
--- Commenting out so the game won't constantly complain in logs.
--- However, making your own modicon is rather easy! Just create an `images`
--- folder under your mod's main folder and place the desired image there.
--- icon_atlas = "modicon.xml"
--- icon = "modicon.tex"
+icon_atlas = "customcmd.xml"
+icon = "customcmd.tex"
 
 ---- VERSIONING ----------------------------------------------------------------
 
@@ -27,7 +24,6 @@ dont_starve_compatible = false
 ---- MOD SCOPE -----------------------------------------------------------------
 
 client_only_mod = false
--- TODO Figure out if `server_only` or `all_clients_require`...
 server_only_mod = false
 all_clients_require_mod = true
 

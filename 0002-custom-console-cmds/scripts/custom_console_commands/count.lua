@@ -44,10 +44,7 @@ function Count:get_displayname(prefab)
 
     -- Some valid prefabs don't have display names
     if not display then 
-        local msg = string.format("Prefab '%s' has no Display Name!", prefab)
-        _G.ChatHistory:SendCommandResponse(msg)
-        -- dedicated servers can't use `SendCommandResponse`, so do this instead
-        print(msg)
+        CustomCmd.Util:printf("Prefab '%s' has no Display Name!", prefab)
     end
 
     -- If no display name (i.e. it's `nil`), we'll just use `"Missing Name"`.
@@ -70,10 +67,8 @@ function Count:make_tally(prefab, entities, remove)
 
     -- Adjust our message's grammar so it looks right.
     if total == 0 then
-        -- Grammar for none found.
         basic = basic:gsub("are", "is no")
     elseif total == 1 then
-        -- Grammar for singular found.
         basic = basic:gsub("are", "is a")
     elseif total == stacks then
         -- Entity is probably unstackable but there's multiple of it,
@@ -127,18 +122,16 @@ end
 ---@param fn_name string The function's name as a string, e.g. `"count_all"`.
 ---@param remove boolean `true` if you want to remove prefabs, false otherwise.
 function Count:make_fn(fn_name, remove)
-    -- Need 1 argument before the varargs ala C-style varargs.
-    -- This also ensures we don't run the prefab count body with 0 arguments.
-    ---@param self CustomCmd
-    ---@param prefab string
+    ---@param self CustomCmd Argument 1.
     ---@param ... string
     ---@diagnostic disable-next-line: redefined-local
-    return function(self, prefab, ...)
-        if prefab == nil or type(prefab) ~= "string" then
+    return function(self, ...)
+        local argc, argv = select('#', ...),  {...}
+        if argc == 0 then
             self:print_usage(fn_name)
             return
         end
-        helperfn({prefab, ...}, remove)
+        helperfn(argv, remove)
     end
 end
 

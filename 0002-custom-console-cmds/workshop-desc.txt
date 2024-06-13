@@ -1,0 +1,103 @@
+Custom remote commands you can use from the console.
+This is mainly intended for server hosters to run useful helper commands from the terminal window.
+ALL output is sent to the shard's master log, and if possible, the terminal window.
+
+This mod creates a new global table called [b]CustomCmd[/b] with various fields that act as functions.
+
+Run [b]CustomCmd:help()[/b] for a quick overview.
+Run [b]CustomCmd:help(<command>)[/b] for more information on a particular function.
+Run [b]CustomCmd:list()[/b] for a list of commands/available table members.
+Run [b]CustomCmd:list(true)[/b] to print all available functions' help.
+
+Familiarity with the Lua programming language is helpful in making the most of this mod.
+
+[h1]Commands[/h1]
+
+So far, this mod contains the following functions within the [b]CustomCmd[/b] global table:
+
+[olist]
+    [*] list
+    [*] help
+    [*] count_all
+    [*] remove_all
+    [*] get_tags
+    [*] add_tags
+    [*] remove_tags
+    [*] give_to
+    [*] give_all
+    [*] set_godmode
+    [*] set_creative
+    [*] godmode_on
+    [*] godmode_off
+    [*] creative_on
+    [*] creative_off
+    [*] spawn_beef
+[/olist]
+
+Hopefully most of the names are self-explanatory. If you're still confused you can always run the help module [b]CustomCmd:help(<field>)[/b], where [b]<field>[/b] is a Lua string.
+
+[h1]Usage[/h1]
+
+[h2][b]CustomCmd:<command>(<arguments>)[/b][/h2]
+
+Replace [b]<command>[/b] and [b]<arguments>[/b] with the appropriate values.
+
+For example (note that each line is a separate command):
+
+[code]
+CustomCmd:list()
+CustomCmd:help()
+CustomCmd:help("give_all")
+CustomCmd:count_all("twigs")
+CustomCmd:add_tags(AllPlayers[1], "merm")
+CustomCmd:give_all("meat", 20)
+[/code]
+
+For most of the functions, calling them with no arguments will print the help.
+
+Some functions like [b]CustomCmd.give_all[/b] and [b]CustomCmd.add_tags[/b] are [i]variadic[/i].
+This means you can pass an arbitrary number of arguments to them. For example:
+
+[code]
+CustomCmd:count_all("beefalo", "pigman", "merm", "spider")
+CustomCmd:add_tags(AllPlayers[1], "beefalo", "merm", "spider")
+[/code]
+
+Other functions have [i]optional arguments[/i], meaning some things have a default value.
+[b]CustomCmd.give_all[/b] and [b]CustomCmd.give_to[/b], for example, usually have the item count as the last argument (argument 2 and 3, respectively).
+If it is not supplied it will default to 1.
+
+[h1]Help[/h1]
+
+[h2][b]CustomCmd:help(<command-name>)[/b][/h2]
+
+Prints a Python-ish "docstring" to the server log and/or terminal window.
+Replace [b]<command-name>[/b] with a Lua string representing the [b]CustomCmd[/b] table field/member.
+Again, you can use [b]CustomCmd:list()[/b] to check which fields are available.
+
+For example:
+
+[code]
+CustomCmd:help("give_all")
+CustomCmd:help("spawn_beef")
+[/code]
+
+You can also prepend [b]"CustomCmd."[/b] or [b]"CustomCmd:"[/b] to the string.
+
+[code]
+CustomCmd:help("CustomCmd.count_all")
+CustomCmd:help("CustomCmd:get_tags")
+[/code]
+
+Lastly, similar to Python's [b]help[/b] function, you can also pass the function objects directly.
+
+Note that you should use periods (the [b].[/b] character), not colons (the [b]:[/b] character), when passing table members as arguments to functions.
+
+This is because, in Lua, the colon is always treated as a table function invocation/call when used outside of function declarations.
+
+So to retrieve table members directly you should only use periods.
+
+[code]
+CustomCmd:help(CustomCmd.remove_all)
+CustomCmd:help(CustomCmd.give_to)
+[/code]

@@ -33,11 +33,9 @@ function Util:get_display(prefab)
     -- I'm assuming that the valid prefab check was already run beforehand
     -- Need upper because all the keys in `STRINGS.NAMES` are uppercase.
     local display = _G.STRINGS.NAMES[prefab:upper()]
-    -- Some valid prefabs don't have display names
     if not display then 
         self:printf("Prefab '%s' has no Display Name!", prefab)
     end
-    -- If no display name (i.e. it's `nil`), we'll just use `"Missing Name"`.
     return display or "Missing Name"
 end
 
@@ -47,10 +45,10 @@ function Util:get_debugstring_tags(inst)
     -- Throaway values so we can skip to the 3rd return value of `string.find`.
     local i, j
     ---@type string
-    local dbg = inst.entity and inst.entity:GetDebugString() or inst:GetDebugString()
+    local s = inst.entity and inst.entity:GetDebugString() or inst:GetDebugString()
     -- return value #3 and above are the captures, if any are specified
-    i, j, dbg = dbg:find("Tags:%s?(.-)%s?\n")
-    return dbg
+    i, j, s = s:find("Tags:%s?(.-)%s?\n")
+    return s
 end
 
 -- Handles indexing into `player.components.inventory:GiveItem` and spawning prefabs.
