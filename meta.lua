@@ -1,0 +1,3 @@
+---@class Map<K, V>: {[K]: V}
+---@class Array<T>: {[integer]: T}
+---@class Dictionary<T>: {[string]: T}

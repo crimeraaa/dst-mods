@@ -1,5 +1,6 @@
--- Only set to `true` when developing.
-local mod_is_local = true
+-- Only set to `false` when uploading to workshop.
+-- Otherwise, set to `true` to distinguish from the release version.
+local mod_is_local = false
 local mod_suffix = (mod_is_local and "Local") or "Server"
 
 ---- BASIC INFORMATION ---------------------------------------------------------
@@ -30,7 +31,7 @@ server_only_mod = false
 all_clients_require_mod = true
 
 -- TODO Comment out when these are needed.
--- ---- HELPER FUNCTIONS ----------------------------------------------------------
+---- HELPER FUNCTIONS ----------------------------------------------------------
 
 -- -- Creates an individual option with `description`, `data` and `hover` fields.
 -- -- You'll probably find you'll need this a lot when creating complex options.
@@ -98,6 +99,6 @@ all_clients_require_mod = true
 --     tbl[#tbl + 1] = element
 -- end
 
--- ---- CONFIGURATIONS OPTIONS PROPER ---------------------------------------------
+---- CONFIGURATIONS OPTIONS PROPER ---------------------------------------------
 
 -- configuration_options = {}

@@ -54,9 +54,7 @@ end
 local function validate_mode(mode)
     -- Got an argument for `params.mode`, so validate it first.
     if mode ~= nil then
-        -- Params are always strings. Note that `tonumber` isn't part of mod env.
         local converted = _G.tonumber(mode)
-        -- Wasn't a number or a valid announcement mode.
         if converted == nil or announce_fns[converted] == nil then
             _G.ChatHistory:SendCommandResponse(
                 string.format("Invalid mode '%s'; see /help count.", mode)
@@ -72,19 +70,15 @@ end
 -- Pass in `params.prefab`. 
 -- Converts `param` to lowercase + checks if exists in the `_G.Prefabs` table.
 local function validate_prefab(prefab)
-    -- Convert to lowercase as all DST prefabs are lowercase.
-    prefab = string.lower(prefab)
-
-    -- `_G.Prefabs` table contains all currently existing prefabs. 
-    -- ? It may include modded prefabs too!
-    if _G.Prefabs[prefab] == nil then
+    local lower = prefab:lower()
+    -- `_G.Prefabs` table contains all currently existing prefabs, including modded.
+    if _G.Prefabs[lower] == nil then
         local warning = string.format("Invalid prefab '%s'!", prefab)
         _G.ChatHistory:SendCommandResponse(warning)
         print(warning)
         return nil
     end
-    -- Prefab exists so we're good to go!
-    return prefab
+    return lower
 end
 
 AddUserCommand("count", {
@@ -97,26 +91,21 @@ Modes: 0 for global chat (default), 1 for whisper chat, 2 for local chat.]],
     slash = true, 
     usermenu = false, 
     servermenu = false, 
-    params = {"prefab", "mode"}, 
-    paramsoptional = {false, true}, 
+    params = {"prefab", "mode"}, -- fields for `params` within `localfn`.
+    paramsoptional = {false, true}, -- must map to the same indexes in `params`.
     vote = false, 
     localfn = function(params, caller) 
         -- Can run slash commands in various situations so avoid these ones
         if caller == nil or caller.HUD == nil then 
             return
         end 
-
-        -- DST prefab strings are always lowercase.
         local prefab = validate_prefab(params.prefab)
-        local mode = validate_mode(params.mode)
-
-        -- If either validation functions returned nil, something went wrong.
-        -- They already send error messages so we don't need to do anything.
+        local mode   = validate_mode(params.mode)
         if not (prefab and mode) then
             return
         end
 
-        local tally = CountPrefabs.make_tally(prefab, CountPrefabs.get_client_ents())
+        local tally = CountPrefabs:make_tally(prefab, CountPrefabs:get_client_ents())
         make_announcement(mode, tally)
     end, 
 }) 
@@ -127,9 +116,9 @@ local prefix = "MOD_COUNTPREFABS"
 
 -- 1-based as Lua normally is, because "key0" doesn't seem right to me.
 local keybind_id = {
-    prefix.."_KEYBIND1",
-    prefix.."_KEYBIND2",
-    prefix.."_KEYBIND3",
+    prefix .. "_KEYBIND1",
+    prefix .. "_KEYBIND2",
+    prefix .. "_KEYBIND3",
 }
 
 -- ? 0-based as global uses mode number 0.
@@ -155,9 +144,9 @@ local function make_announce_act(index)
             if target == nil or target.prefab == nil then
                 return
             end
-            local tally = CountPrefabs.make_tally(
+            local tally = CountPrefabs:make_tally(
                 target.prefab, 
-                CountPrefabs.get_client_ents(), 
+                CountPrefabs:get_client_ents(), 
                 false
             )
             make_announcement(mode, tally)
@@ -166,14 +155,13 @@ local function make_announce_act(index)
     return hint_strings[mode], announce_act_fn
 end
 
----------------------------- KEYBIND ACTION PROPER -----------------------------
+--- KEYBIND ACTION PROPER ------------------------------------------------------
 
 AddAction(keybind_id[1], make_announce_act(0))
 AddAction(keybind_id[2], make_announce_act(1))
 AddAction(keybind_id[3], make_announce_act(2))
 
 -- i just lifted these straight from Environment Pinger's modmain, by sauktux.
-
 AddComponentPostInit("playeractionpicker", function(self, player)
     if player ~= _G.ThePlayer then
         return 
@@ -210,6 +198,10 @@ end)
 -- state variable that's constantly toggled by `OnLeftClick` below
 local cooldown = false 
 
+local function set_cooldown()
+    cooldown = false
+end
+
 AddComponentPostInit("playercontroller", function(self, player)
     -- Might try to init other players even if we're clientsided
     if player ~= _G.ThePlayer then
@@ -222,9 +214,8 @@ AddComponentPostInit("playercontroller", function(self, player)
         local lmb = self:GetLeftMouseAction()
         if down and lmb and lmb.action.id and string.match(lmb.action.id, prefix) then
             if not cooldown then
-                cooldown = _G.ThePlayer:DoTaskInTime(1, function() 
-                    cooldown = false 
-                end)
+                -- avoid constantly allocating for an anonymous function
+                cooldown = _G.ThePlayer:DoTaskInTime(1, set_cooldown)
                 lmb.action.fn(lmb)
                 return
             end

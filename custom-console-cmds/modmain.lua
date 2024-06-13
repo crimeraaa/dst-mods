@@ -1,6 +1,3 @@
----@class Map<K, V>: {[K]: V}
----@class Dictionary<T>: {[string]: T}
-
 ---@class ParamInfo
 ---@field type string
 ---@field desc string
@@ -24,75 +21,16 @@ CustomCmd.Util  = require("custom_console_commands/util")
 CustomCmd.Check = require("custom_console_commands/check")
 CustomCmd.Count = require("custom_console_commands/count")
 
+---@param subject any
+local function enquote(subject)
+    return '\"' .. tostring(subject) .. '\"'
+end
+
+-- This will be populated at the end of the file.
+-- Since this is a table, lookups within functions will be done at runtime so no
+-- need to worry.
 ---@type Dictionary<ParamInfo>
-local Params = {
-    command = {
-        type = "string|function",
-        desc = "A key into CustomCmd, sample string usage, or a function thereof.",
-        sample = {"\"give_to\"", "\"CustomCmd.count_all\"", "CustomCmd.get_tags"},
-        optional = true,
-        default = "calling CustomCmd:list()",
-    },
-    inst = {
-        type = "table",
-        desc = "An entity instance.",
-        sample = {"ThePlayer", "c_findnext(\"beefalo\")", "c_spawn(\"pigman\")"},
-    },
-    item_count = {
-        type = "integer",
-        desc = "How many of the given prefab to give. Must be 1 or greater.",
-        optional = true,
-        default = 1,
-    },
-    player_number = {
-        type = "integer",
-        desc = "Index into the AllPlayers table to retrieve a player entity.",
-    },
-    prefab = {
-        type = "string",
-        desc = "A prefab name string as seen in the DST Lua source code.",
-        sample = {"\"log\"", "\"pigman\"", "\"meat\""},
-    },
-    prefabs = {
-        type = "string",
-        desc = "0 or more other prefab names.",
-        sample = {"\"log\"", "\"pigman\"", "\"meat\""},
-        optional = true,
-        isvararg = true,
-    },
-    saddle = {
-        type = "string",
-        desc = "A saddle prefab name. You can omit the \"saddle_\" part.",
-        sample = {"\"saddle_basic\"", "\"saddle_race\"", "\"saddle_war\"",
-            "\"basic\"", "\"race\"", "\"war\""},
-        optional = true,
-        default = "\"saddle_race\"",
-    },
-    tags = {
-        type = "string",
-        desc = "0 or more other tags.",
-        sample = {"\"beefalo\"", "\"merm\"", "\"player\""},
-        optional = true,
-        isvararg = true,
-    },
-    tendency = {
-        type = "string",
-        desc = "A Beefalo tendency.",
-        sample = {"\"RIDER\"", "\"ORNERY\"", "\"DEFAULT\"", "\"PUDGY\""},
-        optional = true,
-        default = "\"RIDER\"",
-    },
-    toggle = {
-        type = "boolean",
-        desc = "If true, turn the mode on. If false, turn the mode off.",
-    },
-    verbose = {
-        type = "boolean",
-        desc = "If true, print all commands' help information. Otherwise just print the name.",
-        optional = true,
-        default = "false",
-    },
-}
+local Params = {}
 
 ---@class Caller
 ---@field doc DocString
@@ -100,7 +38,7 @@ local Params = {
 
 local Caller = {}
 
--- Populated at the very end of this file, when all the functions are known.
+-- Populated when all functions and their field names are known.
 ---@type Map<Caller, string>
 Caller.aliases = {}
 
@@ -131,6 +69,14 @@ function Caller:is_instance(t)
     return _G.getmetatable(t) == self.mt
 end
 
+function Caller:populate_aliases()
+    for k, v in pairs(CustomCmd) do
+        if self:is_instance(v) and not self.aliases[v] then
+            self.aliases[v] = k
+        end
+    end
+end
+
 CustomCmd.count_all = Caller:new({
     doc = {
         params = {"prefabs"},
@@ -147,125 +93,12 @@ CustomCmd.remove_all = Caller:new({
     fn = CustomCmd.Count:make_fn("remove_all", true)
 })
 
---- HELP UTILITIES -------------------------------------------------------- {{{1
-
----@param display string For varargs, ensure this is `"..."`.
----@param param ParamInfo
-function CustomCmd:print_param(display, param)
-    -- `string.byte` will attempt to return `j - i` values (here, `2 - 1`).
-    local left, right = string.byte(param.optional and "[]" or "<>", 1, 2)
-    self.Util:printf("%c%s%c: %s", left, display, right, param.type)
-    self.Util:printf("\t%s", param.desc)
-    if param.sample then
-        self.Util:printf("\tE.g. %s", table.concat(param.sample, ", "))
-    end
-    if param.default then
-        self.Util:printf("\tDefaults to %s if not specified.", param.default)
-    end
-end
-
----@param cmd string|Caller Docs key or caller instance.
-function CustomCmd:get_caller(cmd)
-    ---@type Caller
-    local caller = type(cmd) == "string" and self[cmd:gsub("^CustomCmd[.:]", "")] or cmd
-    if not Caller:is_instance(caller) then
-        return nil
-    end
-    return caller
-end
-
----@param cmd string|Caller Docs key or caller instance.
-function CustomCmd:print_usage(cmd)
-    local caller = self:get_caller(cmd)
-    if not caller then
-        self.Util:printf("Unknown custom command '%s'.", tostring(cmd))
-        self.Util:printf("See %s().", tostring(self.list))
-        return
-    end
-
-    self.Util:printf("---SYNTAX---")
-    local _params = {} -- silly but need to print `prefabs` as `...`
-    for _, key in ipairs(caller.doc.params) do
-        _params[#_params + 1] = Params[key].isvararg and "..." or key
-    end
-    self.Util:printf("%s(%s)", tostring(caller), table.concat(_params, ", "))
-
-    self.Util:printf("---PARAMS---")
-    if #caller.doc.params > 0 then
-        for i, key in ipairs(caller.doc.params) do
-            self:print_param(_params[i], Params[key])
-        end
-    else
-        print("No parameters.")
-    end
-
-    self.Util:printf("---SAMPLE---")
-    -- Assume `fmt` only has `"%s"` and no other format specifiers.
-    for _, fmt in ipairs(caller.doc.sample) do
-        self.Util:printf(fmt, tostring(caller))
-    end
-
-    self.Util:printf("---RETURN---")
-    if caller.doc.retval then
-        self:print_param("retval", caller.doc.retval)
-    else
-        print("No return value/s.")
-    end
-end
-
-CustomCmd.list = Caller:new({
-    doc = {
-        params = {"verbose"},
-        sample = {"%s()", "%s(true)", "%s(false)"},
-    },
-    
-    ---@param self CustomCmd
-    ---@param verbose boolean?
-    fn = function(self, verbose)
-        print("---COMMANDS LIST---")
-        for field, caller in pairs(self) do
-            if Caller:is_instance(caller) then
-                if verbose then
-                    self:print_usage(caller)
-                    print()
-                else
-                    print(field)
-                end
-            end
-        end
-    end,
-})
-
-CustomCmd.help = Caller:new({
-    doc = {
-        params = {"command"},
-        sample = {
-            "%s(\"give_to\")",
-            "%s(\"CustomCmd.get_tags\")",
-            "%s(CustomCmd.remove_all)",
-        },
-    },
-    ---@param self CustomCmd
-    ---@param what? string|Caller
-    fn = function(self, what)
-        if not what then
-            print("---CUSTOMCMD HELP---")
-            self:help(self.help)
-            self:list()
-            return
-        end
-        self:print_usage(what)
-    end,
-})
-
--- 1}}} ------------------------------------------------------------------------
-
 --- TAG FUNCTIONS --------------------------------------------------------- {{{1
 
 ---@alias Tags table<string, boolean>
 ---@alias GUID integer
 
-local _tags = {
+local Tags = {
      ---@type table<GUID, Tags>
     memoized = {},
 
@@ -283,7 +116,7 @@ local _tags = {
 }
 
 ---@param inst table
-function _tags:new(inst)
+function Tags:new(inst)
     -- Contains the individual tags as seen from the debug string.
     -- You only really need the keys, as the keys themselves are the tags.
     ---@type Tags
@@ -327,7 +160,7 @@ CustomCmd.get_tags = Caller:new({
             self:print_usage("get_tags")
             return nil
         end
-        return _tags:new(inst)
+        return Tags:new(inst)
     end,
 })
 
@@ -464,8 +297,8 @@ end
 
 CustomCmd.set_creative = Caller:new({
     doc = {
-        params = {},
-        sample = {"%s()"},
+        params = {"toggle"},
+        sample = {"%s(true)", "%s(false)"},
     },
     -- See: https://github.com/penguin0616/dst_gamescripts/blob/master/consolecommands.lua#L354
     ---@param self CustomCmd
@@ -511,25 +344,40 @@ CustomCmd.set_godmode = Caller:new({
 
 CustomCmd.creative_on = Caller:new({
     doc = {
-        params = {"toggle"},
-        sample = {"%s(true)", "%s(false)"},
+        params = {},
+        sample = {"%s()"},
     },
-    fn = function(self) self:set_creative(true) end,
+    ---@param self CustomCmd
+    fn = function(self)
+        self:set_creative(true)
+    end,
 })
 
 CustomCmd.creative_off = Caller:new({
     doc = CustomCmd.creative_on.doc,
-    fn = function(self) self:set_creative(false) end,
+
+    ---@param self CustomCmd
+    fn = function(self)
+        self:set_creative(false)
+    end,
 })
 
 CustomCmd.godmode_on = Caller:new({
     doc = CustomCmd.creative_on.doc,
-    fn = function(self) self:set_godmode(true) end
+
+    ---@param self CustomCmd
+    fn = function(self)
+        self:set_godmode(true)
+    end
 })
 
 CustomCmd.godmode_off = Caller:new({
     doc = CustomCmd.creative_on.doc,
-    fn = function(self) self:set_godmode(false) end
+
+    ---@param self CustomCmd
+    fn = function(self)
+        self:set_godmode(false)
+    end
 })
 
 --- 1}}} -----------------------------------------------------------------------
@@ -582,8 +430,204 @@ CustomCmd.spawn_beef = Caller:new({
 })
 --- 1}}} -----------------------------------------------------------------------
 
-for k, v in pairs(CustomCmd) do
-    if Caller:is_instance(v) then
-        Caller.aliases[v] = k
+--- HELP UTILITIES -------------------------------------------------------- {{{1
+--- These are down here so we can call tostring on members at require time.
+
+-- CustomCmd.help and Params will need this.
+Caller:populate_aliases()
+
+---@param display string For varargs, ensure this is `"..."`.
+---@param param ParamInfo
+function CustomCmd:print_param(display, param)
+    -- `string.byte` will attempt to return `(j - i) + 1` values.
+    local left, right = string.byte(param.optional and "[]" or "<>", 1, 2)
+    self.Util:printf("%c%s%c: %s", left, display, right, param.type)
+    self.Util:printf("\t%s", param.desc)
+    if param.sample then
+        self.Util:printf("\tE.g. %s", table.concat(param.sample, ", "))
+    end
+    if param.default then
+        self.Util:printf("\tDefaults to %s if not specified.", param.default)
     end
 end
+
+---@param cmd string|Caller Docs key or caller instance.
+function CustomCmd:get_caller(cmd)
+    ---@type Caller
+    local caller = type(cmd) == "string" and self[cmd:gsub("^CustomCmd[.:]", "")] or cmd
+    return caller, Caller:is_instance(caller)
+end
+
+---@param cmd string|Caller Docs key or caller instance.
+function CustomCmd:print_usage(cmd)
+    local caller, ok = self:get_caller(cmd)
+    if not ok then
+        self.Util:printf("Unknown custom command '%s'.", tostring(cmd))
+        self.Util:printf("See %s().", tostring(self.list))
+        return
+    end
+
+    self.Util:printf("---SYNTAX---")
+    local displays = {} -- silly but need to print `prefabs` as `...`
+    for _, key in ipairs(caller.doc.params) do
+        displays[#displays + 1] = Params[key].isvararg and "..." or key
+    end
+    self.Util:printf("%s(%s)", tostring(caller), table.concat(displays, ", "))
+
+    self.Util:printf("---PARAMS---")
+    if #caller.doc.params > 0 then
+        for i, key in ipairs(caller.doc.params) do
+            self:print_param(displays[i], Params[key])
+        end
+    else
+        print("No parameters.")
+    end
+
+    self.Util:printf("---SAMPLE---")
+    -- Assume `fmt` only has `"%s"` and no other format specifiers.
+    for _, fmt in ipairs(caller.doc.sample) do
+        self.Util:printf(fmt, tostring(caller))
+    end
+
+    self.Util:printf("---RETURN---")
+    if caller.doc.retval then
+        self:print_param("retval", caller.doc.retval)
+    else
+        print("No return value/s.")
+    end
+end
+
+CustomCmd.list = Caller:new({
+    doc = {
+        params = {"verbose"},
+        sample = {"%s()", "%s(true)", "%s(false)"},
+    },
+    
+    ---@param self CustomCmd
+    ---@param verbose boolean?
+    fn = function(self, verbose)
+        print("---COMMANDS LIST---")
+        for field, caller in pairs(self) do
+            if Caller:is_instance(caller) then
+                if verbose then
+                    self:print_usage(caller)
+                    print()
+                else
+                    print(field)
+                end
+            end
+        end
+    end,
+})
+
+CustomCmd.help = Caller:new({
+    doc = {
+        params = {"command"},
+        sample = {
+            "%s(\"give_to\")",
+            "%s(" .. enquote(CustomCmd.get_tags) .. ")",
+            "%s(" .. tostring(CustomCmd.remove_all) .. ")",
+        },
+    },
+    ---@param self CustomCmd
+    ---@param what? string|Caller
+    fn = function(self, what)
+        if not what then
+            print("---CUSTOMCMD HELP---")
+            self:print_usage(self.help)
+            self:list()
+            return
+        end
+        self:print_usage(what)
+    end,
+})
+
+-- DEBUG ONLY
+-- CustomCmd.Caller = Caller
+
+-- 1}}} ------------------------------------------------------------------------
+
+--- POPULATING TABLES ----------------------------------------------------- {{{1
+
+-- Stupid to call this twice but CustomCmd.help need access to tostring members,
+-- yet we also need to alias CustomCmd.help itself.
+Caller:populate_aliases()
+
+Params.command = {
+    type = "string|function",
+    desc = "A key into CustomCmd, sample string usage, or a function thereof.",
+    sample = {"\"give_to\"", enquote(CustomCmd.count_all), enquote(CustomCmd.get_tags)},
+    optional = true,
+    default = "calling " .. tostring(CustomCmd.list),
+}
+
+Params.inst = {
+    type = "table",
+    desc = "An entity instance.",
+    sample = {"ThePlayer", "c_findnext(\"beefalo\")", "c_spawn(\"pigman\")"},
+}
+
+Params.item_count = {
+    type = "integer",
+    desc = "How many of the given prefab to give. Must be 1 or greater.",
+    optional = true,
+    default = 1,
+}
+
+Params.player_number = {
+    type = "integer",
+    desc = "Index into the AllPlayers table to retrieve a player entity.",
+}
+
+Params.prefab = {
+    type = "string",
+    desc = "A prefab name string as seen in the DST Lua source code.",
+    sample = {"\"log\"", "\"pigman\"", "\"meat\""},
+}
+
+Params.prefabs = {
+    type = "string",
+    desc = "0 or more other prefab names.",
+    sample = {"\"log\"", "\"pigman\"", "\"meat\""},
+    optional = true,
+    isvararg = true,
+}
+
+Params.saddle = {
+    type = "string",
+    desc = "A saddle prefab name. You can omit the \"saddle_\" part.",
+    sample = {"\"saddle_basic\"", "\"saddle_race\"", "\"saddle_war\"",
+        "\"basic\"", "\"race\"", "\"war\""},
+    optional = true,
+    default = "\"saddle_race\"",
+}
+
+Params.tags = {
+    type = "string",
+    desc = "0 or more other tags.",
+    sample = {"\"beefalo\"", "\"merm\"", "\"player\""},
+    optional = true,
+    isvararg = true,
+}
+
+Params.tendency = {
+    type = "string",
+    desc = "A Beefalo tendency.",
+    sample = {"\"RIDER\"", "\"ORNERY\"", "\"DEFAULT\"", "\"PUDGY\""},
+    optional = true,
+    default = "\"RIDER\"",
+}
+
+Params.toggle = {
+    type = "boolean",
+    desc = "If true, turn the mode on. If false, turn the mode off.",
+}
+
+Params.verbose = {
+    type = "boolean",
+    desc = "If true, print all commands' help information. Otherwise just print the name.",
+    optional = true,
+    default = "false",
+}
+
+--- 1}}} -----------------------------------------------------------------------
