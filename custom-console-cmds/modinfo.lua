@@ -1,6 +1,6 @@
 -- Only set to `false` when uploading to workshop.
 -- Otherwise, set to `true` to distinguish from the release version.
-local mod_is_local = false
+local mod_is_local = true
 local mod_suffix = (mod_is_local and "Local") or "Server"
 
 ---- BASIC INFORMATION ---------------------------------------------------------
@@ -16,7 +16,7 @@ icon = "customcmd.tex"
 
 ---- VERSIONING ----------------------------------------------------------------
 
-version = "1.0.0"
+version = "1.0.1"
 api_version = 10
 
 ---- COMPATIBILITY -------------------------------------------------------------
